@@ -68,6 +68,9 @@
                     </h1>
                 </div>
                 <div class="flex items-center gap-3">
+                    <button onclick="openAdminPanel()" class="text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg flex items-center gap-2 transition-colors" title="הגדרות מנהל וגיבויים">
+                        <i class="fa-solid fa-gear text-slate-500"></i>
+                    </button>
                     <button onclick="openDashboard()" class="text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
                         <i class="fa-solid fa-chart-pie text-primary-500"></i> אנליטיקה ודאשבורד
                     </button>
@@ -228,7 +231,51 @@
                 </div>
             </div>
         </main>
-    </div> <div class="invoice-template max-w-4xl mx-auto p-10 bg-white text-black min-h-screen border border-slate-200" id="formal-invoice">
+    </div>
+
+    <div id="admin-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="admin-content">
+            <div class="bg-slate-800 p-5 flex justify-between items-center text-white shrink-0">
+                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-gear text-slate-300"></i> הגדרות מנהל ובקרה</h3>
+                <button onclick="closeAdminPanel()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
+                
+                <div class="bg-white border border-slate-200 rounded-xl p-6 mb-6 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div>
+                        <h4 class="font-bold text-slate-800">גיבוי נתוני ליבה (תבניות ומחירון)</h4>
+                        <p class="text-sm text-slate-500">שמור עותק מקומי של כל ההגדרות למקרה של מעבר שרת.</p>
+                    </div>
+                    <button onclick="downloadSystemBackup()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> הורד קובץ גיבוי (.json)
+                    </button>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col h-96">
+                    <div class="p-4 border-b border-slate-100 bg-slate-50">
+                        <h4 class="font-bold text-slate-800"><i class="fa-solid fa-clock-rotate-left text-primary-500 ml-1"></i> יומן פעולות מערכת (Audit Log)</h4>
+                        <p class="text-xs text-slate-500 mt-1">מציג את 100 הפעולות האחרונות שבוצעו במערכת.</p>
+                    </div>
+                    <div class="overflow-y-auto flex-grow p-0">
+                        <table class="min-w-full divide-y divide-slate-100 text-sm">
+                            <thead class="bg-slate-50 sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 w-32">זמן</th>
+                                    <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 w-32">סוג פעולה</th>
+                                    <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500">פירוט</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-table-body" class="divide-y divide-slate-100 bg-white">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="invoice-template max-w-4xl mx-auto p-10 bg-white text-black min-h-screen border border-slate-200" id="formal-invoice">
         <div class="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-8">
             <div>
                 <h1 class="text-4xl font-extrabold text-slate-800 tracking-tight">דרישת תשלום / דוח ריכוז</h1>
@@ -239,7 +286,6 @@
                 <p class="text-lg font-bold" id="inv-date"></p>
             </div>
         </div>
-
         <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-8">
             <h3 class="text-lg font-bold border-b pb-2 mb-4">סיכום כספי לתקופה זו</h3>
             <div class="flex justify-between py-2">
@@ -255,7 +301,6 @@
                 <span class="font-extrabold text-2xl" id="inv-total"></span>
             </div>
         </div>
-
         <div class="mt-20">
             <p class="text-sm text-slate-600 mb-10">הדוח מופק אוטומטית ממערכת הניהול הדיגיטלית ומהווה דרישת תשלום מאושרת לחודש זה. מצורף בנפרד קובץ פירוט מלא (Excel) של כלל הפעילות.</p>
             <div class="flex justify-start border-t w-64 pt-4 border-slate-400">
@@ -290,7 +335,6 @@
                 <button onclick="closeDashboard()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
-                
                 <div class="bg-white border border-slate-200 rounded-xl p-4 mb-6 shadow-sm">
                     <div class="flex justify-between items-end mb-2">
                         <div>
@@ -303,9 +347,7 @@
                         <div id="budget-progress-bar" class="bg-primary-500 h-full w-0 transition-all duration-500"></div>
                     </div>
                 </div>
-
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                    
                     <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
                         <div class="grid grid-cols-2 gap-4 mb-6">
                             <div class="bg-primary-50 rounded-xl p-3 border border-primary-100">
@@ -321,14 +363,12 @@
                             <canvas id="dashboardChart"></canvas>
                         </div>
                     </div>
-
                     <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
                         <h4 class="text-sm font-bold text-slate-600 mb-4 text-center">פילוח הוצאות לפי קטגוריות</h4>
                         <div class="flex-grow relative min-h-[200px]">
                             <canvas id="categoryChart"></canvas>
                         </div>
                     </div>
-
                     <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
                         <div class="bg-slate-800 text-white rounded-xl p-4 mb-4 text-center">
                             <p class="text-xs font-medium text-slate-300 mb-1">תחזית תקציב לסוף החודש הנוכחי</p>
@@ -339,15 +379,12 @@
                             <canvas id="topProductsChart"></canvas>
                         </div>
                     </div>
-
                 </div>
-
                 <div class="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm">
                     <p class="text-sm font-medium text-slate-500 mb-1">סה"כ לתשלום בפועל לתקופה המוצגת</p>
                     <p class="text-4xl font-extrabold text-slate-800"><span id="dash-grand-total">0</span> ₪</p>
                 </div>
             </div>
-
             <div class="p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-3">
                 <div class="flex gap-4">
                     <button onclick="exportMonthlyReport()" class="w-1/2 flex justify-center items-center gap-2 bg-green-600 text-white hover:bg-green-700 py-3 rounded-xl font-bold transition-colors">
@@ -444,7 +481,6 @@
             const oldPrices = JSON.parse(localStorage.getItem('saved_price_history') || '{}');
 
             Object.keys(products).sort((a, b) => a.localeCompare(b, 'he')).forEach(name => {
-                
                 let trendHtml = '';
                 if (oldPrices[name] && oldPrices[name] < products[name]) {
                     trendHtml = '<i class="fa-solid fa-arrow-trend-up text-red-500 mr-2 text-[10px]" title="המחיר עלה"></i>';
@@ -559,6 +595,8 @@
                 if (res && res.ok) {
                     showToast(`"${name}" נמחק!`);
                     loadProducts();
+                } else if (res && res.status === 403) {
+                    showToast('אין לך הרשאות מחיקה', 'error');
                 }
             }
         }
@@ -622,11 +660,16 @@
 
             pendingDeletions[entryId] = {
                 timeout: setTimeout(async () => {
-                    await apiFetch(`/api/entries/${entryId}`, { method: 'DELETE' });
+                    const res = await apiFetch(`/api/entries/${entryId}`, { method: 'DELETE' });
                     const t = document.getElementById(toastId);
                     if(t) { t.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => t.remove(), 300); }
                     delete pendingDeletions[entryId];
-                    loadEntriesForDate(); 
+                    if (res && res.status === 403) {
+                        showToast('אין לך הרשאות מחיקה', 'error');
+                        row.style.display = ''; // מחזיר אם נדחה
+                    } else {
+                        loadEntriesForDate(); 
+                    }
                 }, 5000),
                 row: row
             };
@@ -897,7 +940,7 @@
 
             let regularTotal = 0; let extraTotal = 0;
             const productTotals = {}; 
-            const catTotals = {}; // משתנה לגרף הקטגוריות
+            const catTotals = {};
 
             data.entries.forEach(e => {
                 const price = products[e.product_name] || 0;
@@ -906,7 +949,6 @@
                 
                 productTotals[e.product_name] = (productTotals[e.product_name] || 0) + total;
 
-                // חישוב לקטגוריות
                 let cat = 'כללי';
                 if (e.product_name.includes('-')) cat = e.product_name.split('-')[0].trim();
                 catTotals[cat] = (catTotals[cat] || 0) + total;
@@ -931,7 +973,6 @@
 
             updateBudgetProgress();
 
-            // גרף חלוקה - שוטף מול אקסטרה
             const ctxDoughnut = document.getElementById('dashboardChart').getContext('2d');
             if (dashboardChartInstance) dashboardChartInstance.destroy();
             dashboardChartInstance = new Chart(ctxDoughnut, {
@@ -943,7 +984,6 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { family: 'Heebo' } } } } }
             });
 
-            // גרף קטגוריות חדש
             const ctxCat = document.getElementById('categoryChart').getContext('2d');
             if (categoryChartInstance) categoryChartInstance.destroy();
             categoryChartInstance = new Chart(ctxCat, {
@@ -959,7 +999,6 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { family: 'Heebo' } } } } }
             });
 
-            // גרף 5 המוצרים היקרים
             const sortedProducts = Object.entries(productTotals).sort((a,b) => b[1] - a[1]).slice(0, 5);
             const ctxBar = document.getElementById('topProductsChart').getContext('2d');
             if (topProductsChartInstance) topProductsChartInstance.destroy();
@@ -990,7 +1029,6 @@
             setTimeout(() => modal.classList.add('hidden'), 300);
         }
 
-        // --- ייצוא Excel משודרג בשימוש SheetJS ---
         function exportToExcelFull(entriesData, filenamePrefix) {
             entriesData.sort((a,b) => a.date.localeCompare(b.date));
 
@@ -1033,7 +1071,6 @@
             closeDashboard();
         }
 
-        // --- פיצ'ר חדש: סגירת עונה / פרויקט וניקוי בטוח ---
         async function endOfSeasonReset() {
             if(!confirm("⚠️ אזהרה קריטית!\nפעולה זו תסגור את התקופה הנוכחית:\n1. תוריד קובץ אקסל מסכם של כלל הנתונים בעונה.\n2. תמחק את כל החיובים מהמערכת לאיפוס (המחירון והתבניות יישמרו).\n\nהאם אתה בטוח שברצונך להמשיך?")) return;
 
@@ -1043,7 +1080,6 @@
             const years = [currentYear - 1, currentYear, currentYear + 1]; 
             let allEntries = [];
 
-            // סריקה של כל החודשים כדי לאסוף את הנתונים
             for (const year of years) {
                 for (let month = 1; month <= 12; month++) {
                     const monthStr = `${year}-${month.toString().padStart(2, '0')}`;
@@ -1059,18 +1095,14 @@
                 return showToast('לא נמצאו חיובים במערכת לסגירת תקופה.', 'error');
             }
 
-            // הורדת אקסל של כל השנה/תקופה
             exportToExcelFull(allEntries, "דוח_סגירת_תקופה_מלא");
-
             showToast(`מוחק ${allEntries.length} חיובים, מנקה מערכת...`, 'success');
             
-            // מחיקה אגרסיבית של כל הרשומות מהשרת
             for (const entry of allEntries) {
                 await apiFetch(`/api/entries/${entry.id}`, { method: 'DELETE' });
             }
 
             localStorage.removeItem('monthly_budget');
-
             showToast('התקופה נסגרה והמערכת אופסה בהצלחה!');
             closeDashboard();
             loadEntriesForDate(); 
@@ -1097,6 +1129,83 @@
                 document.body.classList.add('invoice-mode');
                 window.print();
             }, 350); 
+        }
+
+        // --- סקריפטים חדשים לפאנל מנהל (פעימה 3) ---
+        async function openAdminPanel() {
+            const res = await apiFetch('/api/logs');
+            if (res && res.status === 403) {
+                return showToast('אין לך הרשאות לצפות בחמ"ל מנהל', 'error');
+            }
+            if (res && res.ok) {
+                const logs = await res.json();
+                renderLogs(logs);
+                
+                const modal = document.getElementById('admin-modal');
+                const content = document.getElementById('admin-content');
+                modal.classList.remove('hidden');
+                setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+            }
+        }
+
+        function closeAdminPanel() {
+            const modal = document.getElementById('admin-modal');
+            const content = document.getElementById('admin-content');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        function renderLogs(logs) {
+            const tbody = document.getElementById('logs-table-body');
+            tbody.innerHTML = '';
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-slate-500 py-4">אין רישומים ביומן המערכת</td></tr>';
+                return;
+            }
+            
+            logs.forEach(log => {
+                // תרגום קל של הפעולות לעברית לנוחות קריאה
+                let actionStr = log.action;
+                let colorClass = 'text-slate-600';
+                if (log.action === 'NEW_PRODUCT') { actionStr = 'מוצר חדש'; colorClass = 'text-blue-600'; }
+                if (log.action === 'UPDATE_PRICE') { actionStr = 'עדכון מחיר'; colorClass = 'text-indigo-600'; }
+                if (log.action === 'DELETE_PRODUCT') { actionStr = 'מחיקת מוצר'; colorClass = 'text-red-600'; }
+                if (log.action === 'NEW_ENTRY') { actionStr = 'חיוב חדש'; colorClass = 'text-green-600'; }
+                if (log.action === 'DELETE_ENTRY') { actionStr = 'ביטול חיוב'; colorClass = 'text-orange-600'; }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-4 py-2 text-right whitespace-nowrap text-slate-500 font-medium">${log.time}</td>
+                        <td class="px-4 py-2 text-right whitespace-nowrap font-bold ${colorClass}">${actionStr}</td>
+                        <td class="px-4 py-2 text-right text-slate-700">${log.details}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function downloadSystemBackup() {
+            const res = await apiFetch('/api/backup');
+            if (res && res.ok) {
+                const data = await res.json();
+                
+                // הוספת הנתונים הלוקאליים שלנו לקובץ הגיבוי מהשרת
+                const backupObject = {
+                    server_data: data,
+                    local_templates: JSON.parse(localStorage.getItem('billing_templates') || '{}'),
+                    backup_date: new Date().toLocaleDateString('he-IL')
+                };
+
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObject, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", `system_backup_${data.timestamp.split(' ')[0]}.json`);
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+                
+                showToast('קובץ הגיבוי ירד בהצלחה!');
+            }
         }
 
         loadProducts();
