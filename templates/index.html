@@ -10,8 +10,8 @@
     
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.default.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 
     <script>
         tailwind.config = {
@@ -49,7 +49,6 @@
             body.invoice-mode .invoice-template { display: block !important; }
         }
 
-        /* תיקון נראות Tom Select כך שיתאים לגובה שאר השדות */
         .ts-control { border-radius: 0.5rem; padding: 0.6rem 0.75rem; border-color: #cbd5e1; }
         .ts-control.focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
     </style>
@@ -70,10 +69,7 @@
                 </div>
                 <div class="flex items-center gap-3">
                     <button onclick="openDashboard()" class="text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-                        <i class="fa-solid fa-chart-pie text-primary-500"></i> דאשבורד מלא
-                    </button>
-                    <button onclick="exportMonthlyReport()" class="text-sm font-medium text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors">
-                        <i class="fa-solid fa-file-excel"></i> יצוא הנה"ח
+                        <i class="fa-solid fa-chart-pie text-primary-500"></i> אנליטיקה ודאשבורד
                     </button>
                     <a href="/logout" class="text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors">
                         <i class="fa-solid fa-right-from-bracket"></i> יציאה
@@ -161,7 +157,6 @@
                             <div id="quick-add-chips" class="flex flex-wrap items-center gap-2 mb-4 min-h-[24px]"></div>
 
                             <form id="entry-form" class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
-                                
                                 <div class="sm:col-span-5 flex flex-col">
                                     <label class="text-sm font-medium text-slate-700 mb-1">מוצר שנצרך</label>
                                     <select id="entry-prod-select-ui" required class="w-full">
@@ -237,7 +232,7 @@
         <div class="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-8">
             <div>
                 <h1 class="text-4xl font-extrabold text-slate-800 tracking-tight">דרישת תשלום / דוח ריכוז</h1>
-                <p class="text-lg font-bold text-slate-500 mt-2">דוח חיובי מכללה עבור חודש: <span id="inv-month" class="text-slate-800"></span></p>
+                <p class="text-lg font-bold text-slate-500 mt-2">דוח חיובי מכללה עבור: <span id="inv-month" class="text-slate-800"></span></p>
             </div>
             <div class="text-left">
                 <p class="text-sm font-medium text-slate-500">תאריך הפקה:</p>
@@ -246,7 +241,7 @@
         </div>
 
         <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-8">
-            <h3 class="text-lg font-bold border-b pb-2 mb-4">סיכום כספי לחודש זה</h3>
+            <h3 class="text-lg font-bold border-b pb-2 mb-4">סיכום כספי לתקופה זו</h3>
             <div class="flex justify-between py-2">
                 <span class="font-medium text-slate-600">סך הכל חיובים בשוטף (במסגרת תקציב)</span>
                 <span class="font-bold text-lg" id="inv-reg"></span>
@@ -289,16 +284,17 @@
     </div>
 
     <div id="dashboard-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="dashboard-content">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="dashboard-content">
             <div class="bg-slate-800 p-5 flex justify-between items-center text-white shrink-0">
-                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-chart-pie text-primary-400"></i> אנליטיקה ודאשבורד חודשי - <span id="dash-month-title"></span></h3>
+                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-chart-pie text-primary-400"></i> אנליטיקה ודאשבורד לתקופה - <span id="dash-month-title"></span></h3>
                 <button onclick="closeDashboard()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
+                
                 <div class="bg-white border border-slate-200 rounded-xl p-4 mb-6 shadow-sm">
                     <div class="flex justify-between items-end mb-2">
                         <div>
-                            <label class="block text-xs font-bold text-slate-500 mb-1">תקציב יעד חודשי (₪):</label>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">תקציב יעד לתקופה (₪):</label>
                             <input type="number" id="budget-input" placeholder="לדוג' 10000" oninput="updateBudgetProgress()" class="px-3 py-1 text-sm border rounded-lg w-32 focus:ring-2 focus:ring-primary-500 outline-none bg-slate-50">
                         </div>
                         <div class="text-left text-sm font-bold text-slate-700" id="budget-percentage-text">0% נוצלו</div>
@@ -307,7 +303,9 @@
                         <div id="budget-progress-bar" class="bg-primary-500 h-full w-0 transition-all duration-500"></div>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    
                     <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
                         <div class="grid grid-cols-2 gap-4 mb-6">
                             <div class="bg-primary-50 rounded-xl p-3 border border-primary-100">
@@ -323,28 +321,44 @@
                             <canvas id="dashboardChart"></canvas>
                         </div>
                     </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                        <h4 class="text-sm font-bold text-slate-600 mb-4 text-center">פילוח הוצאות לפי קטגוריות</h4>
+                        <div class="flex-grow relative min-h-[200px]">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
+
                     <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
                         <div class="bg-slate-800 text-white rounded-xl p-4 mb-4 text-center">
-                            <p class="text-xs font-medium text-slate-300 mb-1">תחזית תקציב לסוף החודש (לפי קצב נוכחי)</p>
+                            <p class="text-xs font-medium text-slate-300 mb-1">תחזית תקציב לסוף החודש הנוכחי</p>
                             <p class="text-3xl font-extrabold text-white"><span id="dash-forecast">0</span> ₪</p>
                         </div>
-                        <h4 class="text-sm font-bold text-slate-600 mb-2">5 המוצרים היקרים החודש</h4>
+                        <h4 class="text-sm font-bold text-slate-600 mb-2">5 המוצרים היקרים ביותר</h4>
                         <div class="flex-grow relative min-h-[150px]">
                             <canvas id="topProductsChart"></canvas>
                         </div>
                     </div>
+
                 </div>
+
                 <div class="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm">
-                    <p class="text-sm font-medium text-slate-500 mb-1">סה"כ לתשלום החודש בפועל</p>
+                    <p class="text-sm font-medium text-slate-500 mb-1">סה"כ לתשלום בפועל לתקופה המוצגת</p>
                     <p class="text-4xl font-extrabold text-slate-800"><span id="dash-grand-total">0</span> ₪</p>
                 </div>
             </div>
-            <div class="p-5 border-t border-slate-100 bg-white shrink-0 flex gap-4">
-                <button onclick="exportMonthlyReport()" class="w-1/2 flex justify-center items-center gap-2 bg-green-600 text-white hover:bg-green-700 py-3 rounded-xl font-bold transition-colors">
-                    <i class="fa-solid fa-file-excel"></i> הורד אקסל פירוט
-                </button>
-                <button onclick="generateFormalInvoice()" class="w-1/2 flex justify-center items-center gap-2 bg-slate-800 text-white hover:bg-slate-900 py-3 rounded-xl font-bold transition-colors">
-                    <i class="fa-solid fa-file-pdf"></i> הפק דרישת תשלום רשמית
+
+            <div class="p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-3">
+                <div class="flex gap-4">
+                    <button onclick="exportMonthlyReport()" class="w-1/2 flex justify-center items-center gap-2 bg-green-600 text-white hover:bg-green-700 py-3 rounded-xl font-bold transition-colors">
+                        <i class="fa-solid fa-file-excel"></i> הורד דוח Excel מתקדם
+                    </button>
+                    <button onclick="generateFormalInvoice()" class="w-1/2 flex justify-center items-center gap-2 bg-slate-800 text-white hover:bg-slate-900 py-3 rounded-xl font-bold transition-colors">
+                        <i class="fa-solid fa-file-pdf"></i> הפק דרישת תשלום רשמית
+                    </button>
+                </div>
+                <button onclick="endOfSeasonReset()" class="w-full flex justify-center items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 py-3 rounded-xl font-bold transition-colors mt-2">
+                    <i class="fa-solid fa-power-off"></i> סגירת תקופה ואיפוס מערכת לחלוטין (מחיקת כל החיובים)
                 </button>
             </div>
         </div>
@@ -357,6 +371,7 @@
         let ts; 
         let dashboardChartInstance = null; 
         let topProductsChartInstance = null;
+        let categoryChartInstance = null;
         let currentGrandTotal = 0; 
         let pendingDeletions = {}; 
 
@@ -882,6 +897,7 @@
 
             let regularTotal = 0; let extraTotal = 0;
             const productTotals = {}; 
+            const catTotals = {}; // משתנה לגרף הקטגוריות
 
             data.entries.forEach(e => {
                 const price = products[e.product_name] || 0;
@@ -889,6 +905,11 @@
                 if(e.is_extra) extraTotal += total; else regularTotal += total;
                 
                 productTotals[e.product_name] = (productTotals[e.product_name] || 0) + total;
+
+                // חישוב לקטגוריות
+                let cat = 'כללי';
+                if (e.product_name.includes('-')) cat = e.product_name.split('-')[0].trim();
+                catTotals[cat] = (catTotals[cat] || 0) + total;
             });
 
             currentGrandTotal = regularTotal + extraTotal;
@@ -910,6 +931,7 @@
 
             updateBudgetProgress();
 
+            // גרף חלוקה - שוטף מול אקסטרה
             const ctxDoughnut = document.getElementById('dashboardChart').getContext('2d');
             if (dashboardChartInstance) dashboardChartInstance.destroy();
             dashboardChartInstance = new Chart(ctxDoughnut, {
@@ -921,6 +943,23 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { family: 'Heebo' } } } } }
             });
 
+            // גרף קטגוריות חדש
+            const ctxCat = document.getElementById('categoryChart').getContext('2d');
+            if (categoryChartInstance) categoryChartInstance.destroy();
+            categoryChartInstance = new Chart(ctxCat, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(catTotals),
+                    datasets: [{ 
+                        data: Object.values(catTotals), 
+                        backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'], 
+                        borderWidth: 0 
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { family: 'Heebo' } } } } }
+            });
+
+            // גרף 5 המוצרים היקרים
             const sortedProducts = Object.entries(productTotals).sort((a,b) => b[1] - a[1]).slice(0, 5);
             const ctxBar = document.getElementById('topProductsChart').getContext('2d');
             if (topProductsChartInstance) topProductsChartInstance.destroy();
@@ -951,27 +990,90 @@
             setTimeout(() => modal.classList.add('hidden'), 300);
         }
 
+        // --- ייצוא Excel משודרג בשימוש SheetJS ---
+        function exportToExcelFull(entriesData, filenamePrefix) {
+            entriesData.sort((a,b) => a.date.localeCompare(b.date));
+
+            const regData = [['תאריך', 'שם המוצר', 'כמות', 'מחיר יחידה (ש"ח)', 'סה"כ (ש"ח)']];
+            const extData = [['תאריך', 'שם המוצר', 'כמות', 'מחיר יחידה (ש"ח)', 'סה"כ (ש"ח)']];
+
+            let regTotal = 0; let extTotal = 0;
+
+            entriesData.forEach(e => {
+                const price = products[e.product_name] || 0;
+                const total = price * e.quantity;
+                const row = [e.date, e.product_name, e.quantity, price, total];
+
+                if(e.is_extra) { extData.push(row); extTotal += total; } 
+                else { regData.push(row); regTotal += total; }
+            });
+
+            regData.push(['', '', '', 'סה"כ שוטף:', regTotal]);
+            extData.push(['', '', '', 'סה"כ אקסטרה:', extTotal]);
+
+            const wb = XLSX.utils.book_new();
+            const wsReg = XLSX.utils.aoa_to_sheet(regData);
+            const wsExt = XLSX.utils.aoa_to_sheet(extData);
+
+            if(!wsReg['!views']) wsReg['!views'] = []; wsReg['!views'].push({ rightToLeft: true });
+            if(!wsExt['!views']) wsExt['!views'] = []; wsExt['!views'].push({ rightToLeft: true });
+
+            XLSX.utils.book_append_sheet(wb, wsReg, "חיובים שוטפים");
+            XLSX.utils.book_append_sheet(wb, wsExt, "חריגות אקסטרה");
+
+            XLSX.writeFile(wb, `${filenamePrefix}.xlsx`);
+        }
+
         async function exportMonthlyReport() {
             const data = await fetchMonthlyData();
             if(!data || data.entries.length === 0) return showToast('אין נתונים', 'error');
+            
+            exportToExcelFull(data.entries, `דוח_חיובי_מכללה_${data.month}`);
+            showToast('דוח ה-Excel הופק בהצלחה!');
+            closeDashboard();
+        }
 
-            let csvContent = '\uFEFFתאריך,סוג חיוב,שם המוצר,כמות,מחיר יחידה (ש"ח),סה"כ לתשלום (ש"ח)\n';
-            data.entries.sort((a,b) => a.date.localeCompare(b.date));
-            let regTotal = 0, extTotal = 0;
+        // --- פיצ'ר חדש: סגירת עונה / פרויקט וניקוי בטוח ---
+        async function endOfSeasonReset() {
+            if(!confirm("⚠️ אזהרה קריטית!\nפעולה זו תסגור את התקופה הנוכחית:\n1. תוריד קובץ אקסל מסכם של כלל הנתונים בעונה.\n2. תמחק את כל החיובים מהמערכת לאיפוס (המחירון והתבניות יישמרו).\n\nהאם אתה בטוח שברצונך להמשיך?")) return;
 
-            data.entries.forEach(e => {
-                const price = products[e.product_name] || 0;
-                const total = price * e.quantity;
-                const typeStr = e.is_extra ? 'אקסטרה' : 'שוטף';
-                if(e.is_extra) extTotal += total; else regTotal += total;
-                csvContent += `${e.date},${typeStr},${e.product_name},${e.quantity},${price.toFixed(2)},${total.toFixed(2)}\n`;
-            });
+            showToast('אוסף נתונים לסגירת תקופה, אנא המתן...', 'success');
 
-            csvContent += `\n,,,סיכום חיובי שוטף:,${regTotal.toFixed(2)}\n,,,סיכום חיובי אקסטרה:,${extTotal.toFixed(2)}\n,,,סה"כ כללי לתשלום:,${(regTotal + extTotal).toFixed(2)}\n`;
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `דוח_חיובים_${data.month}.csv`;
-            document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            showToast('הדוח ירד בהצלחה!'); closeDashboard();
+            const currentYear = new Date().getFullYear();
+            const years = [currentYear - 1, currentYear, currentYear + 1]; 
+            let allEntries = [];
+
+            // סריקה של כל החודשים כדי לאסוף את הנתונים
+            for (const year of years) {
+                for (let month = 1; month <= 12; month++) {
+                    const monthStr = `${year}-${month.toString().padStart(2, '0')}`;
+                    const res = await apiFetch(`/api/report/month/${monthStr}`);
+                    if (res && res.ok) {
+                        const entries = await res.json();
+                        allEntries = allEntries.concat(entries);
+                    }
+                }
+            }
+
+            if (allEntries.length === 0) {
+                return showToast('לא נמצאו חיובים במערכת לסגירת תקופה.', 'error');
+            }
+
+            // הורדת אקסל של כל השנה/תקופה
+            exportToExcelFull(allEntries, "דוח_סגירת_תקופה_מלא");
+
+            showToast(`מוחק ${allEntries.length} חיובים, מנקה מערכת...`, 'success');
+            
+            // מחיקה אגרסיבית של כל הרשומות מהשרת
+            for (const entry of allEntries) {
+                await apiFetch(`/api/entries/${entry.id}`, { method: 'DELETE' });
+            }
+
+            localStorage.removeItem('monthly_budget');
+
+            showToast('התקופה נסגרה והמערכת אופסה בהצלחה!');
+            closeDashboard();
+            loadEntriesForDate(); 
         }
 
         window.onafterprint = function() {
