@@ -23,6 +23,10 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        .toast-exit { animation: slideOut 0.3s ease-in forwards; }
+        @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 0; } }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
@@ -33,12 +37,17 @@
                 <div class="bg-primary-600 text-white p-2 rounded-lg shadow-md">
                     <i class="fa-solid fa-chart-line text-xl"></i>
                 </div>
-                <h1 class="text-2xl font-bold text-slate-900 tracking-tight">ניהול חיובי מכללה</h1>
+                <h1 class="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    ניהול חיובי מכללה
+                    <span class="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-md font-normal"><i class="fa-solid fa-lock text-[10px] text-green-500"></i> מאובטח</span>
+                </h1>
             </div>
             <div class="flex gap-3">
+                <button onclick="openDashboard()" class="text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
+                    <i class="fa-solid fa-chart-pie text-primary-500"></i> סיכום חודשי
+                </button>
                 <button onclick="exportMonthlyReport()" class="text-sm font-medium text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors">
-                    <i class="fa-solid fa-file-excel"></i>
-                    דוח חודשי לאקסל
+                    <i class="fa-solid fa-file-excel"></i> יצוא הנה"ח
                 </button>
             </div>
         </div>
@@ -51,8 +60,7 @@
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-140px)] sticky top-24">
                     <div class="p-5 border-b border-slate-100 bg-slate-50/50">
                         <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-                            <i class="fa-solid fa-tags text-primary-500"></i>
-                            מחירון מוצרים
+                            <i class="fa-solid fa-tags text-primary-500"></i> מחירון מוצרים
                         </h2>
                     </div>
 
@@ -60,13 +68,13 @@
                         <form id="product-form" class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">שם המוצר</label>
-                                <input type="text" id="prod-name" required class="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" placeholder="לדוג': קפה מגורען">
+                                <input type="text" id="prod-name" required class="block w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">מחיר יחידה (₪)</label>
-                                <input type="number" id="prod-price" step="0.01" required class="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" placeholder="0.00">
+                                <input type="number" id="prod-price" step="0.01" required class="block w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
                             </div>
-                            <button type="submit" class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-all">
+                            <button type="submit" class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-all">
                                 <i class="fa-solid fa-plus"></i> שמור למחירון
                             </button>
                         </form>
@@ -102,15 +110,16 @@
                     
                     <div class="p-6 border-b border-slate-100 bg-slate-50/50">
                         <form id="entry-form" class="flex flex-col sm:flex-row items-end gap-4">
+                            
                             <div class="w-full sm:w-2/5">
-                                <label class="block text-sm font-medium text-slate-700 mb-1">מוצר שנצרך</label>
-                                <select id="entry-prod-select" required class="block w-full py-2.5 px-3 border border-slate-300 rounded-lg outline-none cursor-pointer bg-white">
-                                    <option value="">-- טוען מוצרים... --</option>
-                                </select>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">מוצר שנצרך (הקלד לחיפוש)</label>
+                                <input list="products-list" id="entry-prod-input" placeholder="התחל להקליד..." required class="block w-full py-2.5 px-3 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+                                <datalist id="products-list"></datalist>
                             </div>
+
                             <div class="w-full sm:w-1/5">
                                 <label class="block text-sm font-medium text-slate-700 mb-1">כמות</label>
-                                <input type="number" id="entry-qty" step="0.01" value="1" min="0.01" required class="block w-full py-2.5 px-3 border border-slate-300 rounded-lg outline-none text-center">
+                                <input type="number" id="entry-qty" step="0.01" value="1" min="0.01" required class="block w-full py-2.5 px-3 border border-slate-300 rounded-lg outline-none text-center focus:ring-2 focus:ring-primary-500">
                             </div>
                             
                             <div class="w-full sm:w-1/5 pb-2 flex items-center justify-center">
@@ -157,22 +166,74 @@
         </div>
     </main>
 
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
+
+    <div id="dashboard-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-300" id="dashboard-content">
+            <div class="bg-slate-800 p-5 flex justify-between items-center text-white">
+                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-chart-pie text-primary-400"></i> סיכום חודשי - <span id="dash-month-title"></span></h3>
+                <button onclick="closeDashboard()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-primary-50 rounded-xl p-4 border border-primary-100">
+                        <p class="text-sm font-medium text-primary-600 mb-1">תקציב שוטף</p>
+                        <p class="text-2xl font-bold text-primary-800"><span id="dash-regular-total">0</span> ₪</p>
+                    </div>
+                    <div class="bg-orange-50 rounded-xl p-4 border border-orange-100">
+                        <p class="text-sm font-medium text-orange-600 mb-1">חריגות (אקסטרה)</p>
+                        <p class="text-2xl font-bold text-orange-800"><span id="dash-extra-total">0</span> ₪</p>
+                    </div>
+                </div>
+                <div class="bg-slate-100 rounded-xl p-4 text-center">
+                    <p class="text-sm font-medium text-slate-500 mb-1">סה"כ לתשלום החודש</p>
+                    <p class="text-4xl font-extrabold text-slate-800"><span id="dash-grand-total">0</span> ₪</p>
+                </div>
+                <button onclick="exportMonthlyReport()" class="w-full mt-6 flex justify-center items-center gap-2 bg-green-600 text-white hover:bg-green-700 py-3 rounded-xl font-bold transition-colors">
+                    <i class="fa-solid fa-file-excel"></i> הורד אקסל מלא להנה"ח
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let products = {};
         document.getElementById('current-date').valueAsDate = new Date();
 
+        // --- פונקציית התראות קופצות ---
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const icon = type === 'success' ? '<i class="fa-solid fa-circle-check text-green-500"></i>' : '<i class="fa-solid fa-triangle-exclamation text-red-500"></i>';
+            const bgColor = type === 'success' ? 'bg-white border-green-100' : 'bg-white border-red-100';
+            
+            toast.className = `toast-enter flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${bgColor} pointer-events-auto`;
+            toast.innerHTML = `${icon} <span class="font-medium text-sm text-slate-800">${message}</span>`;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.replace('toast-enter', 'toast-exit');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
         async function loadProducts() {
-            const res = await fetch('/api/products');
-            products = await res.json();
-            renderProducts();
-            loadEntriesForDate();
+            try {
+                const res = await fetch('/api/products');
+                products = await res.json();
+                renderProducts();
+                loadEntriesForDate();
+            } catch (e) {
+                showToast('שגיאה בטעינת נתונים', 'error');
+            }
         }
 
         function renderProducts() {
             const tbody = document.getElementById('price-list-table-body');
-            const select = document.getElementById('entry-prod-select');
+            const datalist = document.getElementById('products-list'); // ה-Datalist החדש!
             tbody.innerHTML = '';
-            select.innerHTML = '<option value="">-- בחר מוצר --</option>';
+            datalist.innerHTML = '';
 
             Object.keys(products).sort().forEach(name => {
                 tbody.innerHTML += `
@@ -180,10 +241,10 @@
                         <td class="px-4 py-3 text-sm font-medium text-slate-800">${name}</td>
                         <td class="px-4 py-3 text-sm text-slate-600">${products[name].toFixed(2)} ₪</td>
                         <td class="px-4 py-3 text-center">
-                            <button onclick="deleteProduct('${name}')" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100"><i class="fa-solid fa-trash-can"></i></button>
+                            <button onclick="deleteProduct('${name}')" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-solid fa-trash-can"></i></button>
                         </td>
                     </tr>`;
-                select.innerHTML += `<option value="${name}">${name}</option>`;
+                datalist.innerHTML += `<option value="${name}">`;
             });
         }
 
@@ -191,14 +252,17 @@
             e.preventDefault();
             const name = document.getElementById('prod-name').value.trim();
             const price = parseFloat(document.getElementById('prod-price').value);
+            
             await fetch('/api/products', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, price }) });
             document.getElementById('product-form').reset();
+            showToast(`"${name}" נשמר במחירון!`);
             loadProducts();
         });
 
         async function deleteProduct(name) {
-            if(confirm(`למחוק את "${name}"?`)) {
+            if(confirm(`למחוק את "${name}" מהמחירון?`)) {
                 await fetch(`/api/products/${name}`, { method: 'DELETE' });
+                showToast(`"${name}" נמחק מהמחירון`);
                 loadProducts();
             }
         }
@@ -220,17 +284,16 @@
                 const itemTotal = price * entry.quantity;
                 total += itemTotal;
                 
-                // תגית חזותית לאקסטרה
                 const extraTag = entry.is_extra ? `<span class="ml-2 text-[10px] bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-bold border border-orange-200">אקסטרה</span>` : '';
 
                 tbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 ${entry.is_extra ? 'bg-orange-50/20' : ''}">
+                    <tr class="hover:bg-slate-50 ${entry.is_extra ? 'bg-orange-50/30' : ''}">
                         <td class="px-6 py-4 text-sm font-semibold text-slate-800">${entry.product_name} ${extraTag}</td>
                         <td class="px-6 py-4 text-sm text-slate-700 text-center font-medium">${entry.quantity}</td>
                         <td class="px-6 py-4 text-sm text-slate-600 text-right">${price.toFixed(2)} ₪</td>
                         <td class="px-6 py-4 text-sm font-bold text-primary-700 text-right">${itemTotal.toFixed(2)} ₪</td>
                         <td class="px-6 py-4 text-center">
-                            <button onclick="deleteEntry(${entry.id})" class="text-red-400 hover:text-red-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+                            <button onclick="deleteEntry(${entry.id})" class="text-red-400 hover:text-red-600 transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
                         </td>
                     </tr>`;
             });
@@ -240,9 +303,15 @@
         document.getElementById('entry-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const date = document.getElementById('current-date').value;
-            const product_name = document.getElementById('entry-prod-select').value;
+            const product_name = document.getElementById('entry-prod-input').value.trim(); // Datalist input
             const quantity = document.getElementById('entry-qty').value;
             const is_extra = document.getElementById('entry-is-extra').checked;
+
+            // בדיקת תקינות - האם המוצר באמת קיים במחירון
+            if (!products.hasOwnProperty(product_name)) {
+                showToast('אנא בחר מוצר מתוך הרשימה הקיימת', 'error');
+                return;
+            }
 
             await fetch('/api/entries', {
                 method: 'POST',
@@ -251,60 +320,109 @@
             });
             
             document.getElementById('entry-qty').value = 1;
-            document.getElementById('entry-prod-select').value = '';
-            document.getElementById('entry-is-extra').checked = false; // איפוס התיבה
+            document.getElementById('entry-prod-input').value = '';
+            document.getElementById('entry-is-extra').checked = false;
+            
+            showToast('החיוב התווסף בהצלחה!');
             loadEntriesForDate();
         });
 
         async function deleteEntry(entryId) {
-            if(confirm('להסיר חיוב זה?')) {
+            if(confirm('להסיר חיוב זה מהתאריך הנוכחי?')) {
                 await fetch(`/api/entries/${entryId}`, { method: 'DELETE' });
+                showToast('החיוב הוסר', 'success');
                 loadEntriesForDate();
             }
         }
 
-        // --- פונקציה לייצוא דוח להנהלת חשבונות ---
-        async function exportMonthlyReport() {
-            const dateVal = document.getElementById('current-date').value; // YYYY-MM-DD
-            if(!dateVal) return alert('אנא בחר תאריך קודם');
-            
-            const month = dateVal.substring(0, 7); // חיתוך לקבלת YYYY-MM
-            
-            try {
-                const res = await fetch(`/api/report/month/${month}`);
-                const entries = await res.json();
-                
-                if (entries.length === 0) {
-                    return alert('אין נתונים להפקת דוח בחודש זה.');
-                }
+        // --- פונקציות דאשבורד ויצוא אקסל ---
+        
+        async function fetchMonthlyData() {
+            const dateVal = document.getElementById('current-date').value; 
+            if(!dateVal) return null;
+            const month = dateVal.substring(0, 7); 
+            const res = await fetch(`/api/report/month/${month}`);
+            return { month, entries: await res.json() };
+        }
 
-                // הוספת BOM כדי שהעברית תוצג טוב באקסל
-                let csvContent = '\uFEFF'; 
-                csvContent += 'תאריך,סוג חיוב,שם המוצר,כמות,מחיר יחידה (ש"ח),סה"כ לתשלום (ש"ח)\n';
-
-                // מיון לפי תאריכים
-                entries.sort((a,b) => a.date.localeCompare(b.date));
-
-                entries.forEach(e => {
-                    const price = products[e.product_name] || 0;
-                    const total = price * e.quantity;
-                    const typeStr = e.is_extra ? 'אקסטרה' : 'שוטף';
-                    csvContent += `${e.date},${typeStr},${e.product_name},${e.quantity},${price.toFixed(2)},${total.toFixed(2)}\n`;
-                });
-
-                // יצירת הקובץ והורדה
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.setAttribute('href', url);
-                link.setAttribute('download', `דוח_חיובים_הנהלת_חשבונות_${month}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            } catch (err) {
-                console.error(err);
-                alert('אירעה שגיאה בהפקת הדוח.');
+        async function openDashboard() {
+            const data = await fetchMonthlyData();
+            if(!data || data.entries.length === 0) {
+                return showToast('אין נתונים להצגה בחודש זה', 'error');
             }
+
+            let regularTotal = 0;
+            let extraTotal = 0;
+
+            data.entries.forEach(e => {
+                const price = products[e.product_name] || 0;
+                const total = price * e.quantity;
+                if(e.is_extra) extraTotal += total;
+                else regularTotal += total;
+            });
+
+            document.getElementById('dash-month-title').textContent = data.month;
+            document.getElementById('dash-regular-total').textContent = regularTotal.toFixed(2);
+            document.getElementById('dash-extra-total').textContent = extraTotal.toFixed(2);
+            document.getElementById('dash-grand-total').textContent = (regularTotal + extraTotal).toFixed(2);
+
+            const modal = document.getElementById('dashboard-modal');
+            const content = document.getElementById('dashboard-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95');
+            }, 10);
+        }
+
+        function closeDashboard() {
+            const modal = document.getElementById('dashboard-modal');
+            const content = document.getElementById('dashboard-content');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        async function exportMonthlyReport() {
+            const data = await fetchMonthlyData();
+            if(!data || data.entries.length === 0) {
+                return showToast('אין נתונים להפקת דוח', 'error');
+            }
+
+            let csvContent = '\uFEFF'; 
+            csvContent += 'תאריך,סוג חיוב,שם המוצר,כמות,מחיר יחידה (ש"ח),סה"כ לתשלום (ש"ח)\n';
+
+            data.entries.sort((a,b) => a.date.localeCompare(b.date));
+
+            let regularTotal = 0;
+            let extraTotal = 0;
+
+            data.entries.forEach(e => {
+                const price = products[e.product_name] || 0;
+                const total = price * e.quantity;
+                const typeStr = e.is_extra ? 'אקסטרה' : 'שוטף';
+                
+                if(e.is_extra) extraTotal += total; else regularTotal += total;
+
+                csvContent += `${e.date},${typeStr},${e.product_name},${e.quantity},${price.toFixed(2)},${total.toFixed(2)}\n`;
+            });
+
+            // שורות סיכום באקסל
+            csvContent += `\n,,,סיכום חיובי שוטף:,${regularTotal.toFixed(2)}\n`;
+            csvContent += `,,,סיכום חיובי אקסטרה:,${extraTotal.toFixed(2)}\n`;
+            csvContent += `,,,סה"כ כללי לתשלום:,${(regularTotal + extraTotal).toFixed(2)}\n`;
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `דוח_חיובים_${data.month}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showToast('הדוח ירד בהצלחה!');
+            closeDashboard(); // למקרה שהורדנו מתוך הדאשבורד
         }
 
         loadProducts();
