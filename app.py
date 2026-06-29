@@ -1,16 +1,13 @@
 import os
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
+
 app = Flask(__name__)
 
-# מפתח אבטחה להצפנת הסשן - חובה ב-Flask
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'super-secret-key-123')
+# הגדרה יציבה ל-SECRET_KEY
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-secret-key-for-development')
 
-# שם משתמש וסיסמה ממשתני הסביבה או ברירת מחדל
-AUTH_USER = os.environ.get('AUTH_USER', 'admin')
-AUTH_PASS = os.environ.get('AUTH_PASS', '1234')
-
-# הגדרות מסד נתונים (SQLAlchemy ו-Neon)
-from flask_sqlalchemy import SQLAlchemy
+# הגדרות מסד נתונים
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///local_products.db')
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -19,6 +16,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+# מודלים
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -34,15 +32,12 @@ class DailyEntry(db.Model):
 with app.app_context():
     db.create_all()
 
-# --- מנגנון בדיקת התחברות (Middleware) ---
+# הגנת התחברות (ללא basic auth, רק סשן פנימי)
 @app.before_request
 def require_login():
-    # רשימת נתיבים שמותר לגשת אליהם ללא התחברות
     allowed_routes = ['login', 'static']
     if request.endpoint not in allowed_routes and not session.get('logged_in'):
         return render_template('login.html')
-
-# --- נתיבי המערכת ---
 
 @app.route('/')
 def index():
@@ -51,10 +46,9 @@ def index():
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json or {}
-    username = data.get('username')
-    password = data.get('password')
-    
-    if username == AUTH_USER and password == AUTH_PASS:
+    # שימוש במשתני סביבה או ערכי ברירת מחדל
+    if data.get('username') == os.environ.get('AUTH_USER', 'admin') and \
+       data.get('password') == os.environ.get('AUTH_PASS', '1234'):
         session['logged_in'] = True
         return jsonify({"success": True})
     return jsonify({"success": False, "message": "שם משתמש או סיסמה שגויים"}), 401
@@ -62,10 +56,9 @@ def login():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect('/')
+    return redirect(url_for('index'))
 
-# --- APIs לניהול מוצרים וחיובים (כולם מוגנים אוטומטית) ---
-
+# כל שאר ה-API (אותו קוד קודם)
 @app.route('/api/products', methods=['GET'])
 def get_products():
     products = Product.query.all()
@@ -78,9 +71,11 @@ def add_product():
     if product:
         product.price = data['price']
     else:
-        db.session.add(Product(name=data['name'], price=data['price']))
+        db.add(Product(name=data['name'], price=data['price']))
     db.session.commit()
     return jsonify({"success": True})
+
+# ... (שאר ה-API נשארים ללא שינוי)
 
 @app.route('/api/products/<name>', methods=['DELETE'])
 def delete_product(name):
