@@ -40,13 +40,11 @@
         .invoice-template { display: none; }
         
         @media print {
-            /* מצב הדפסה רגיל (דוח יומי) */
             body:not(.invoice-mode) { background: white; }
             body:not(.invoice-mode) .print\:hidden { display: none !important; }
             body:not(.invoice-mode) .print\:w-full { width: 100% !important; grid-column: span 12 / span 12 !important; }
             body:not(.invoice-mode) .print\:shadow-none { box-shadow: none !important; border: none !important; }
 
-            /* מצב הדפסת חשבונית מיוחד (מסתיר את כל האפליקציה) */
             body.invoice-mode .app-ui { display: none !important; }
             body.invoice-mode .invoice-template { display: block !important; }
         }
@@ -165,10 +163,7 @@
                                 </div>
                                 
                                 <div class="w-full sm:w-1/5">
-                                    <label class="block text-sm font-medium text-slate-700 mb-1 flex justify-between items-center">
-                                        כמות
-                                        <button type="button" onclick="calculateRoomUnits()" class="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded hover:bg-slate-300 transition-colors" title="מחשבון חדרים (4 יח' לחדר)"><i class="fa-solid fa-bed"></i></button>
-                                    </label>
+                                    <label class="block text-sm font-medium text-slate-700 mb-1">כמות</label>
                                     <input type="text" inputmode="text" id="entry-qty" value="1" required class="block w-full py-2.5 px-3 border border-slate-300 rounded-lg outline-none text-center focus:ring-2 focus:ring-primary-500" placeholder="כמות / תרגיל" oninput="updateLivePreview()">
                                     <p id="live-preview-box" class="text-xs text-primary-600 font-bold mt-1 text-center h-4"></p>
                                 </div>
@@ -356,8 +351,7 @@
         let dashboardChartInstance = null; 
         let topProductsChartInstance = null;
         let currentGrandTotal = 0; 
-        
-        let pendingDeletions = {}; // משתנה למנגנון ה-Undo החדש
+        let pendingDeletions = {}; 
 
         const today = new Date();
         const dateStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
@@ -413,7 +407,7 @@
             products = await res.json();
             renderProducts();
             loadEntriesForDate();
-            updateQuickAddChips(); // עדכון כפתורי ההוספה המהירה בטעינה
+            updateQuickAddChips(); 
         }
 
         function renderProducts() {
@@ -471,10 +465,8 @@
             });
         }
 
-        // --- פיצ'ר חדש: כפתורי הוספה מהירה (Quick-Add) ---
         function updateQuickAddChips() {
             const freq = JSON.parse(localStorage.getItem('prod_freq') || '{}');
-            // מוצאים את 5 המוצרים שהוזנו הכי הרבה
             const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5);
             const container = document.getElementById('quick-add-chips');
             
@@ -482,7 +474,6 @@
             
             let html = '<span class="text-xs text-slate-400 font-bold ml-2"><i class="fa-solid fa-bolt text-yellow-400"></i> הוספה מהירה:</span>';
             sorted.forEach(([name, count]) => {
-                // וודא שהמוצר עדיין קיים במחירון
                 if(products[name]) {
                     html += `<button type="button" onclick="selectQuickAdd('${name}')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-full text-xs font-bold transition-colors">${name}</button>`;
                 }
@@ -495,7 +486,6 @@
             document.getElementById('entry-qty').focus();
             updateLivePreview();
         }
-        // --------------------------------------------------
 
         async function bulkUpdatePrices() {
             if (Object.keys(products).length === 0) return showToast('המחירון ריק.', 'error');
@@ -590,10 +580,9 @@
             document.getElementById('daily-total').textContent = formatMoney(total);
         }
 
-        // --- פיצ'ר חדש: מנגנון בטל מחיקה (Undo) לחיובים יומיומיים ---
         function deleteEntryWithUndo(entryId, btnElement) {
             const row = btnElement.closest('tr');
-            row.style.display = 'none'; // העלמה מיידית מהמסך ללא מחיקה מה-DB
+            row.style.display = 'none'; 
             
             const container = document.getElementById('toast-container');
             const toastId = 'toast-undo-' + Date.now();
@@ -603,20 +592,19 @@
             toast.innerHTML = `
                 <div class="flex items-center gap-2 text-yellow-800">
                     <i class="fa-solid fa-trash-arrow-up"></i>
-                    <span class="text-sm font-bold">החיוב הוסר מרשימת היום.</span>
+                    <span class="text-sm font-bold">החיוב הוסר.</span>
                 </div>
                 <button onclick="undoDelete(${entryId}, '${toastId}')" class="bg-yellow-200 hover:bg-yellow-300 text-yellow-800 px-3 py-1.5 rounded-md text-xs font-bold transition-colors">בטל מחיקה</button>
             `;
             container.appendChild(toast);
 
-            // מגדיר טיימר לביצוע המחיקה בשרת בעוד 5 שניות
             pendingDeletions[entryId] = {
                 timeout: setTimeout(async () => {
                     await apiFetch(`/api/entries/${entryId}`, { method: 'DELETE' });
                     const t = document.getElementById(toastId);
                     if(t) { t.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => t.remove(), 300); }
                     delete pendingDeletions[entryId];
-                    loadEntriesForDate(); // סנכרון סופי של הסכומים
+                    loadEntriesForDate(); 
                 }, 5000),
                 row: row
             };
@@ -624,14 +612,13 @@
 
         function undoDelete(entryId, toastId) {
             if(pendingDeletions[entryId]) {
-                clearTimeout(pendingDeletions[entryId].timeout); // עוצר את פקודת המחיקה
-                pendingDeletions[entryId].row.style.display = ''; // מחזיר למסך
+                clearTimeout(pendingDeletions[entryId].timeout); 
+                pendingDeletions[entryId].row.style.display = ''; 
                 delete pendingDeletions[entryId];
             }
             const t = document.getElementById(toastId);
             if(t) { t.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => t.remove(), 300); }
         }
-        // -------------------------------------------------------------
 
         function openTemplatesModal() {
             renderTemplatesList();
@@ -742,16 +729,6 @@
             }
         }
 
-        function calculateRoomUnits() {
-            const rooms = prompt('הזן מספר חדרים לחיוב (המערכת תחשב לפי התקן: 4 יחידות בכל חדר):');
-            if (rooms && !isNaN(rooms)) {
-                const totalUnits = rooms * 4;
-                document.getElementById('entry-qty').value = totalUnits;
-                updateLivePreview();
-                showToast(`חושב: ${rooms} חדרים × 4 יחידות = ${totalUnits}`);
-            }
-        }
-
         function updateLivePreview() {
             const prodName = document.getElementById('entry-prod-select-ui').value;
             const qty = getEvaluatedQuantity();
@@ -845,11 +822,10 @@
             btn.disabled = false;
 
             if (res && res.ok) {
-                // עדכון תדירות לשימוש בכפתורי הוספה מהירה
                 let freq = JSON.parse(localStorage.getItem('prod_freq') || '{}');
                 freq[product_name] = (freq[product_name] || 0) + 1;
                 localStorage.setItem('prod_freq', JSON.stringify(freq));
-                updateQuickAddChips(); // מרענן את הכפתורים מיד לאחר ההוספה
+                updateQuickAddChips(); 
 
                 document.getElementById('entry-qty').value = 1;
                 document.getElementById('entry-is-extra').checked = false;
@@ -991,7 +967,6 @@
             showToast('הדוח ירד בהצלחה!'); closeDashboard();
         }
 
-        // --- פיצ'ר חדש: מחולל דרישת תשלום (חשבונית) בהדפסה נקייה ---
         window.onafterprint = function() {
             document.body.classList.remove('invoice-mode');
         }
@@ -1012,9 +987,8 @@
             setTimeout(() => {
                 document.body.classList.add('invoice-mode');
                 window.print();
-            }, 350); // מחכה שהדאשבורד ייסגר לחלוטין לפני הפעלת ההדפסה
+            }, 350); 
         }
-        // -------------------------------------------------------------
 
         loadProducts();
     </script>
