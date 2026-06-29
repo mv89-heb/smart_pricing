@@ -4,10 +4,10 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 
-# הגדרה יציבה ל-SECRET_KEY
+# הגדרה יציבה ל-SECRET_KEY (אבטחת סשן)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-secret-key-for-development')
 
-# הגדרות מסד נתונים
+# הגדרות מסד נתונים (Neon)
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///local_products.db')
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -16,7 +16,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# מודלים
+# --- מודלים במסד הנתונים ---
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -32,13 +32,18 @@ class DailyEntry(db.Model):
 with app.app_context():
     db.create_all()
 
-# הגנת התחברות (ללא basic auth, רק סשן פנימי)
+# --- הגנת התחברות למערכת ---
 @app.before_request
 def require_login():
     allowed_routes = ['login', 'static']
     if request.endpoint not in allowed_routes and not session.get('logged_in'):
-        return render_template('login.html')
+        # בדיקה שהקובץ קיים כדי למנוע שגיאת 500
+        if os.path.exists(os.path.join(app.root_path, 'templates', 'login.html')):
+            return render_template('login.html')
+        else:
+            return "מערכת מוגנת: חסר קובץ login.html בתיקיית ה-templates", 500
 
+# --- נתיבי תצוגה ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -46,7 +51,6 @@ def index():
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json or {}
-    # שימוש במשתני סביבה או ערכי ברירת מחדל
     if data.get('username') == os.environ.get('AUTH_USER', 'admin') and \
        data.get('password') == os.environ.get('AUTH_PASS', '1234'):
         session['logged_in'] = True
@@ -58,7 +62,7 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
-# כל שאר ה-API (אותו קוד קודם)
+# --- API לניהול נתונים (SQL) ---
 @app.route('/api/products', methods=['GET'])
 def get_products():
     products = Product.query.all()
@@ -71,11 +75,9 @@ def add_product():
     if product:
         product.price = data['price']
     else:
-        db.add(Product(name=data['name'], price=data['price']))
+        db.session.add(Product(name=data['name'], price=data['price']))
     db.session.commit()
     return jsonify({"success": True})
-
-# ... (שאר ה-API נשארים ללא שינוי)
 
 @app.route('/api/products/<name>', methods=['DELETE'])
 def delete_product(name):
