@@ -82,7 +82,7 @@
                                 <label class="block text-sm font-medium text-slate-700 mb-1">מחיר יחידה (₪)</label>
                                 <input type="number" id="prod-price" step="0.01" required class="block w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
                             </div>
-                            <button type="submit" class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-all">
+                            <button type="submit" id="product-submit-btn" class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-all">
                                 <i class="fa-solid fa-plus"></i> שמור למחירון
                             </button>
                         </form>
@@ -139,7 +139,7 @@
                             </div>
 
                             <div class="w-full sm:w-1/5">
-                                <button type="submit" class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg shadow-sm text-sm font-medium text-white bg-slate-800 hover:bg-slate-900 transition-all">
+                                <button type="submit" id="entry-submit-btn" class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg shadow-sm text-sm font-medium text-white bg-slate-800 hover:bg-slate-900 transition-all">
                                     <i class="fa-solid fa-arrow-down"></i> הוסף
                                 </button>
                             </div>
@@ -208,7 +208,31 @@
     <script>
         let products = {};
         let ts; // משתנה גלובלי ל-Tom Select
-        document.getElementById('current-date').valueAsDate = new Date();
+        
+        // הגדרת תאריך מדוייק לזמן מקומי
+        const today = new Date();
+        const dateStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+        document.getElementById('current-date').value = dateStr;
+
+        // פונקציית עזר לעיצוב מטבע
+        function formatMoney(amount) {
+            return amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // פונקציית מעטפת חכמה ל-Fetch שמטפלת בניתוקים (Session Expiration)
+        async function apiFetch(url, options = {}) {
+            try {
+                const res = await fetch(url, options);
+                if (res.status === 401) {
+                    window.location.href = '/login'; // הפניה ללוגין אם נותקנו
+                    return null;
+                }
+                return res;
+            } catch (err) {
+                showToast('שגיאת תקשורת', 'error');
+                return null;
+            }
+        }
 
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
@@ -220,7 +244,6 @@
             toast.innerHTML = `${icon} <span class="font-medium text-sm text-slate-800">${message}</span>`;
             
             container.appendChild(toast);
-            
             setTimeout(() => {
                 toast.classList.replace('toast-enter', 'toast-exit');
                 setTimeout(() => toast.remove(), 300);
@@ -228,14 +251,11 @@
         }
 
         async function loadProducts() {
-            try {
-                const res = await fetch('/api/products');
-                products = await res.json();
-                renderProducts();
-                loadEntriesForDate();
-            } catch (e) {
-                showToast('שגיאה בטעינת נתונים', 'error');
-            }
+            const res = await apiFetch('/api/products');
+            if (!res) return;
+            products = await res.json();
+            renderProducts();
+            loadEntriesForDate();
         }
 
         function renderProducts() {
@@ -243,16 +263,14 @@
             const select = document.getElementById('entry-prod-select-ui');
             
             tbody.innerHTML = '';
-            
-            // איפוס Tom Select
-            if (ts) ts.destroy();
-            select.innerHTML = '<option value="">בחר מוצר מהרשימה...</option>';
+            if (ts) { ts.destroy(); ts = null; }
+            select.innerHTML = '<option value="">בחר מוצר...</option>';
 
             Object.keys(products).sort().forEach(name => {
                 tbody.innerHTML += `
                     <tr class="hover:bg-slate-50 group">
                         <td class="px-4 py-3 text-sm font-medium text-slate-800">${name}</td>
-                        <td class="px-4 py-3 text-sm text-slate-600">${products[name].toFixed(2)} ₪</td>
+                        <td class="px-4 py-3 text-sm text-slate-600">${formatMoney(products[name])} ₪</td>
                         <td class="px-4 py-3 text-center">
                             <button onclick="deleteProduct('${name}')" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-solid fa-trash-can"></i></button>
                         </td>
@@ -264,7 +282,6 @@
                 select.appendChild(opt);
             });
 
-            // הפעלת העיצוב החדש לתיבת הבחירה
             ts = new TomSelect("#entry-prod-select-ui", {
                 create: false,
                 sortField: { field: "text", direction: "asc" }
@@ -273,28 +290,41 @@
 
         document.getElementById('product-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const btn = document.getElementById('product-submit-btn');
+            btn.disabled = true;
+
             const name = document.getElementById('prod-name').value.trim();
             const price = parseFloat(document.getElementById('prod-price').value);
             
-            await fetch('/api/products', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, price }) });
-            document.getElementById('product-form').reset();
-            showToast(`"${name}" נשמר במחירון!`);
-            loadProducts();
+            const res = await apiFetch('/api/products', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ name, price }) 
+            });
+            
+            btn.disabled = false;
+            if (res && res.ok) {
+                document.getElementById('product-form').reset();
+                showToast(`"${name}" נשמר במחירון!`);
+                loadProducts();
+            }
         });
 
         async function deleteProduct(name) {
             if(confirm(`למחוק את "${name}" מהמחירון?`)) {
-                await fetch(`/api/products/${name}`, { method: 'DELETE' });
-                showToast(`"${name}" נמחק מהמחירון`);
-                loadProducts();
+                const res = await apiFetch(`/api/products/${name}`, { method: 'DELETE' });
+                if (res && res.ok) {
+                    showToast(`"${name}" נמחק מהמחירון`);
+                    loadProducts();
+                }
             }
         }
 
         async function loadEntriesForDate() {
             const date = document.getElementById('current-date').value;
             if (!date) return;
-            const res = await fetch(`/api/entries/${date}`);
-            renderEntries(await res.json());
+            const res = await apiFetch(`/api/entries/${date}`);
+            if (res) renderEntries(await res.json());
         }
 
         function renderEntries(entries) {
@@ -313,18 +343,20 @@
                     <tr class="hover:bg-slate-50 ${entry.is_extra ? 'bg-orange-50/30' : ''}">
                         <td class="px-6 py-4 text-sm font-semibold text-slate-800">${entry.product_name} ${extraTag}</td>
                         <td class="px-6 py-4 text-sm text-slate-700 text-center font-medium">${entry.quantity}</td>
-                        <td class="px-6 py-4 text-sm text-slate-600 text-right">${price.toFixed(2)} ₪</td>
-                        <td class="px-6 py-4 text-sm font-bold text-primary-700 text-right">${itemTotal.toFixed(2)} ₪</td>
+                        <td class="px-6 py-4 text-sm text-slate-600 text-right">${formatMoney(price)} ₪</td>
+                        <td class="px-6 py-4 text-sm font-bold text-primary-700 text-right">${formatMoney(itemTotal)} ₪</td>
                         <td class="px-6 py-4 text-center">
                             <button onclick="deleteEntry(${entry.id})" class="text-red-400 hover:text-red-600 transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
                         </td>
                     </tr>`;
             });
-            document.getElementById('daily-total').textContent = total.toFixed(2);
+            document.getElementById('daily-total').textContent = formatMoney(total);
         }
 
         document.getElementById('entry-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const btn = document.getElementById('entry-submit-btn');
+            
             const date = document.getElementById('current-date').value;
             const product_name = document.getElementById('entry-prod-select-ui').value;
             const quantity = document.getElementById('entry-qty').value;
@@ -335,25 +367,31 @@
                 return;
             }
 
-            await fetch('/api/entries', {
+            btn.disabled = true;
+            const res = await apiFetch('/api/entries', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ date, product_name, quantity, is_extra })
             });
-            
-            document.getElementById('entry-qty').value = 1;
-            document.getElementById('entry-is-extra').checked = false;
-            ts.clear(); // איפוס תיבת Tom Select
-            
-            showToast('החיוב התווסף בהצלחה!');
-            loadEntriesForDate();
+            btn.disabled = false;
+
+            if (res && res.ok) {
+                document.getElementById('entry-qty').value = 1;
+                document.getElementById('entry-is-extra').checked = false;
+                if (ts) ts.clear(); 
+                
+                showToast('החיוב התווסף בהצלחה!');
+                loadEntriesForDate();
+            }
         });
 
         async function deleteEntry(entryId) {
             if(confirm('להסיר חיוב זה מהתאריך הנוכחי?')) {
-                await fetch(`/api/entries/${entryId}`, { method: 'DELETE' });
-                showToast('החיוב הוסר', 'success');
-                loadEntriesForDate();
+                const res = await apiFetch(`/api/entries/${entryId}`, { method: 'DELETE' });
+                if (res && res.ok) {
+                    showToast('החיוב הוסר', 'success');
+                    loadEntriesForDate();
+                }
             }
         }
 
@@ -361,8 +399,8 @@
             const dateVal = document.getElementById('current-date').value; 
             if(!dateVal) return null;
             const month = dateVal.substring(0, 7); 
-            const res = await fetch(`/api/report/month/${month}`);
-            return { month, entries: await res.json() };
+            const res = await apiFetch(`/api/report/month/${month}`);
+            return res ? { month, entries: await res.json() } : null;
         }
 
         async function openDashboard() {
@@ -382,9 +420,9 @@
             });
 
             document.getElementById('dash-month-title').textContent = data.month;
-            document.getElementById('dash-regular-total').textContent = regularTotal.toFixed(2);
-            document.getElementById('dash-extra-total').textContent = extraTotal.toFixed(2);
-            document.getElementById('dash-grand-total').textContent = (regularTotal + extraTotal).toFixed(2);
+            document.getElementById('dash-regular-total').textContent = formatMoney(regularTotal);
+            document.getElementById('dash-extra-total').textContent = formatMoney(extraTotal);
+            document.getElementById('dash-grand-total').textContent = formatMoney(regularTotal + extraTotal);
 
             const modal = document.getElementById('dashboard-modal');
             const content = document.getElementById('dashboard-content');
