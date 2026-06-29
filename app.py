@@ -1,9 +1,17 @@
 import os
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_basicauth import BasicAuth
 
 app = Flask(__name__)
 
+# --- הגדרות סיסמה למערכת (Basic Auth) ---
+app.config['BASIC_AUTH_USERNAME'] = os.environ.get('AUTH_USER', 'admin')
+app.config['BASIC_AUTH_PASSWORD'] = os.environ.get('AUTH_PASS', '1234')
+app.config['BASIC_AUTH_FORCE'] = True  # דורש סיסמה בכניסה לאתר
+basic_auth = BasicAuth(app)
+
+# --- הגדרות מסד נתונים ---
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///local_products.db')
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -23,7 +31,7 @@ class DailyEntry(db.Model):
     date = db.Column(db.String(20), nullable=False) 
     product_name = db.Column(db.String(100), nullable=False)
     quantity = db.Column(db.Float, nullable=False)
-    is_extra = db.Column(db.Boolean, default=False) # העמודה החדשה!
+    is_extra = db.Column(db.Boolean, default=False)
 
 with app.app_context():
     db.create_all()
@@ -72,7 +80,6 @@ def add_entry():
     quantity = float(data['quantity'])
     is_extra = data.get('is_extra', False)
     
-    # חשוב: מפרידים בין מוצר שוטף למוצר אקסטרה גם אם זה אותו מוצר באותו יום
     entry = DailyEntry.query.filter_by(date=date, product_name=product_name, is_extra=is_extra).first()
     if entry:
         entry.quantity += quantity
@@ -91,10 +98,8 @@ def delete_entry(entry_id):
         db.session.commit()
     return jsonify({"success": True})
 
-# נתיב חדש להפקת דוח חודשי להנהלת חשבונות
 @app.route('/api/report/month/<year_month>', methods=['GET'])
 def get_monthly_report(year_month):
-    # שולף את כל הרשומות שמתחילות בחודש והשנה שביקשנו
     entries = DailyEntry.query.filter(DailyEntry.date.startswith(year_month)).all()
     return jsonify([{
         'id': e.id, 'date': e.date, 'product_name': e.product_name,
