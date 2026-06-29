@@ -8,8 +8,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.default.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
@@ -36,7 +37,6 @@
         @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 0; } }
         
-        /* סגנונות למערכת ההדפסה והחשבוניות */
         .invoice-template { display: none; }
         
         @media print {
@@ -48,6 +48,10 @@
             body.invoice-mode .app-ui { display: none !important; }
             body.invoice-mode .invoice-template { display: block !important; }
         }
+
+        /* תיקון נראות Tom Select כך שיתאים לגובה שאר השדות */
+        .ts-control { border-radius: 0.5rem; padding: 0.6rem 0.75rem; border-color: #cbd5e1; }
+        .ts-control.focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
@@ -113,7 +117,7 @@
                                     <thead class="bg-slate-50 sticky top-0 z-10">
                                         <tr>
                                             <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500">מוצר</th>
-                                            <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500">מחיר</th>
+                                            <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500">מחיר</th>
                                             <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500"></th>
                                         </tr>
                                     </thead>
@@ -134,7 +138,10 @@
                             </button>
                             <p class="hidden print:block text-slate-500 font-bold text-lg mt-1" id="print-date-display"></p>
                         </div>
-                        <div class="flex items-center gap-2 print:hidden">
+                        
+                        <div class="flex items-center gap-2 print:hidden flex-row-reverse sm:flex-row">
+                            <input type="date" id="current-date" onchange="loadEntriesForDate()" class="block w-full sm:w-40 px-3 py-2 border-2 border-primary-100 rounded-xl font-bold text-primary-700 bg-primary-50 outline-none cursor-pointer">
+                            
                             <button onclick="openTemplatesModal()" class="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors" title="סלים ותבניות">
                                 <i class="fa-solid fa-layer-group"></i> <span class="hidden sm:inline">תבניות</span>
                             </button>
@@ -144,7 +151,6 @@
                             <button onclick="clearCurrentDay()" class="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors" title="נקה יום שלם">
                                 <i class="fa-solid fa-trash-can"></i>
                             </button>
-                            <input type="date" id="current-date" onchange="loadEntriesForDate()" class="block w-full sm:w-40 px-3 py-2 border-2 border-primary-100 rounded-xl font-bold text-primary-700 bg-primary-50 outline-none cursor-pointer">
                         </div>
                     </div>
 
@@ -152,31 +158,32 @@
                         
                         <div class="p-6 border-b border-slate-100 bg-slate-50/50 print:hidden">
                             
-                            <div id="quick-add-chips" class="flex flex-wrap items-center gap-2 mb-4"></div>
+                            <div id="quick-add-chips" class="flex flex-wrap items-center gap-2 mb-4 min-h-[24px]"></div>
 
-                            <form id="entry-form" class="flex flex-col sm:flex-row items-start sm:items-end gap-4">
-                                <div class="w-full sm:w-2/5">
-                                    <label class="block text-sm font-medium text-slate-700 mb-1">מוצר שנצרך</label>
-                                    <select id="entry-prod-select-ui" required class="w-full" onchange="updateLivePreview()">
+                            <form id="entry-form" class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
+                                
+                                <div class="sm:col-span-5 flex flex-col">
+                                    <label class="text-sm font-medium text-slate-700 mb-1">מוצר שנצרך</label>
+                                    <select id="entry-prod-select-ui" required class="w-full">
                                         <option value="">בחר מוצר...</option>
                                     </select>
+                                    <p id="live-preview-box" class="text-xs text-primary-600 font-bold mt-1 h-4 text-right pr-1"></p>
                                 </div>
                                 
-                                <div class="w-full sm:w-1/5">
-                                    <label class="block text-sm font-medium text-slate-700 mb-1">כמות</label>
-                                    <input type="text" inputmode="text" id="entry-qty" value="1" required class="block w-full py-2.5 px-3 border border-slate-300 rounded-lg outline-none text-center focus:ring-2 focus:ring-primary-500" placeholder="כמות / תרגיל" oninput="updateLivePreview()">
-                                    <p id="live-preview-box" class="text-xs text-primary-600 font-bold mt-1 text-center h-4"></p>
+                                <div class="sm:col-span-2 flex flex-col">
+                                    <label class="text-sm font-medium text-slate-700 mb-1 text-center">כמות</label>
+                                    <input type="text" inputmode="text" id="entry-qty" value="1" required class="w-full py-2.5 px-3 border border-slate-300 rounded-lg outline-none text-center focus:ring-2 focus:ring-primary-500" placeholder="מספר/תרגיל" oninput="updateLivePreview()">
                                 </div>
                                 
-                                <div class="w-full sm:w-1/5 pb-5 sm:pb-6 flex items-center justify-center">
-                                    <label class="flex items-center gap-2 cursor-pointer text-sm font-bold text-orange-600 bg-orange-50 px-3 py-2 rounded-lg border border-orange-200 hover:bg-orange-100 transition-colors">
+                                <div class="sm:col-span-3 flex flex-col justify-end h-full sm:pt-[24px]">
+                                    <label class="flex items-center justify-center gap-2 cursor-pointer text-sm font-bold text-orange-600 bg-orange-50 py-2.5 px-3 rounded-lg border border-orange-200 hover:bg-orange-100 transition-colors w-full h-[44px]">
                                         <input type="checkbox" id="entry-is-extra" class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500 cursor-pointer">
                                         חיוב אקסטרה
                                     </label>
                                 </div>
 
-                                <div class="w-full sm:w-1/5 pb-0 sm:pb-5">
-                                    <button type="submit" id="entry-submit-btn" class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg shadow-sm text-sm font-medium text-white bg-slate-800 hover:bg-slate-900 transition-all" title="ניתן ללחוץ על Ctrl+Enter">
+                                <div class="sm:col-span-2 flex flex-col justify-end h-full sm:pt-[24px]">
+                                    <button type="submit" id="entry-submit-btn" class="w-full flex justify-center items-center gap-2 py-2 px-4 rounded-lg shadow-sm text-sm font-medium text-white bg-slate-800 hover:bg-slate-900 transition-all h-[44px]" title="Ctrl+Enter להוספה">
                                         <i class="fa-solid fa-arrow-down"></i> הוסף
                                     </button>
                                 </div>
@@ -196,8 +203,8 @@
                                     <tr>
                                         <th class="px-6 py-4 text-right text-sm font-semibold text-slate-600 print:text-black">שם המוצר</th>
                                         <th class="px-6 py-4 text-center text-sm font-semibold text-slate-600 w-24 print:text-black">כמות</th>
-                                        <th class="px-6 py-4 text-right text-sm font-semibold text-slate-600 w-32 print:text-black">מחיר יחידה</th>
-                                        <th class="px-6 py-4 text-right text-sm font-semibold text-slate-600 w-32 print:text-black">סה"כ</th>
+                                        <th class="px-6 py-4 text-center text-sm font-semibold text-slate-600 w-32 print:text-black">מחיר יחידה</th>
+                                        <th class="px-6 py-4 text-center text-sm font-semibold text-slate-600 w-32 print:text-black">סה"כ</th>
                                         <th class="px-6 py-4 text-center text-sm font-semibold text-slate-600 w-16 print:hidden"></th>
                                     </tr>
                                 </thead>
@@ -217,7 +224,7 @@
                                     <i class="fa-brands fa-whatsapp text-lg"></i> שתף
                                 </button>
                                 <button onclick="window.print()" class="flex-1 sm:flex-none bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
-                                    <i class="fa-solid fa-print"></i> הדפס דוח יומי
+                                    <i class="fa-solid fa-print"></i> הדפס יומי
                                 </button>
                             </div>
                         </div>
@@ -421,7 +428,7 @@
             const categories = {};
             const oldPrices = JSON.parse(localStorage.getItem('saved_price_history') || '{}');
 
-            Object.keys(products).sort().forEach(name => {
+            Object.keys(products).sort((a, b) => a.localeCompare(b, 'he')).forEach(name => {
                 
                 let trendHtml = '';
                 if (oldPrices[name] && oldPrices[name] < products[name]) {
@@ -432,8 +439,8 @@
 
                 tbody.innerHTML += `
                     <tr class="hover:bg-slate-50 group">
-                        <td class="px-4 py-3 text-sm font-medium text-slate-800">${trendHtml}${name}</td>
-                        <td class="px-4 py-3 text-sm text-slate-600">${formatMoney(products[name])} ₪</td>
+                        <td class="px-4 py-3 text-sm font-medium text-slate-800 text-right">${trendHtml}${name}</td>
+                        <td class="px-4 py-3 text-sm text-slate-600 text-center">${formatMoney(products[name])} ₪</td>
                         <td class="px-4 py-3 text-center">
                             <button onclick="deleteProduct('${name}')" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-solid fa-trash-can"></i></button>
                         </td>
@@ -447,10 +454,10 @@
 
             localStorage.setItem('saved_price_history', JSON.stringify(products));
 
-            Object.keys(categories).sort().forEach(cat => {
+            Object.keys(categories).sort((a, b) => a.localeCompare(b, 'he')).forEach(cat => {
                 const optgroup = document.createElement('optgroup');
                 optgroup.label = cat;
-                categories[cat].sort().forEach(name => {
+                categories[cat].sort((a, b) => a.localeCompare(b, 'he')).forEach(name => {
                     const opt = document.createElement('option');
                     opt.value = name; opt.textContent = name; 
                     optgroup.appendChild(opt);
@@ -475,7 +482,7 @@
             let html = '<span class="text-xs text-slate-400 font-bold ml-2"><i class="fa-solid fa-bolt text-yellow-400"></i> הוספה מהירה:</span>';
             sorted.forEach(([name, count]) => {
                 if(products[name]) {
-                    html += `<button type="button" onclick="selectQuickAdd('${name}')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-full text-xs font-bold transition-colors">${name}</button>`;
+                    html += `<button type="button" onclick="selectQuickAdd('${name}')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-full text-xs font-bold transition-colors shadow-sm">${name}</button>`;
                 }
             });
             container.innerHTML = html;
@@ -564,14 +571,14 @@
                 const itemTotal = price * entry.quantity;
                 total += itemTotal;
                 
-                const extraTag = entry.is_extra ? `<span class="ml-2 text-[10px] bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-bold border border-orange-200">אקסטרה</span>` : '';
+                const extraTag = entry.is_extra ? `<span class="mr-2 text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold border border-orange-200">אקסטרה</span>` : '';
 
                 tbody.innerHTML += `
                     <tr class="hover:bg-slate-50 ${entry.is_extra ? 'bg-orange-50/30' : ''} table-row-item">
-                        <td class="px-6 py-4 text-sm font-semibold text-slate-800 print:text-black print:p-2 product-name-cell">${entry.product_name} ${extraTag}</td>
+                        <td class="px-6 py-4 text-sm font-semibold text-slate-800 text-right print:text-black print:p-2 product-name-cell">${entry.product_name} ${extraTag}</td>
                         <td class="px-6 py-4 text-sm text-slate-700 text-center font-medium print:text-black print:p-2">${entry.quantity}</td>
-                        <td class="px-6 py-4 text-sm text-slate-600 text-right print:text-black print:p-2">${formatMoney(price)} ₪</td>
-                        <td class="px-6 py-4 text-sm font-bold text-primary-700 text-right print:text-black print:p-2">${formatMoney(itemTotal)} ₪</td>
+                        <td class="px-6 py-4 text-sm text-slate-600 text-center print:text-black print:p-2">${formatMoney(price)} ₪</td>
+                        <td class="px-6 py-4 text-sm font-bold text-primary-700 text-center print:text-black print:p-2">${formatMoney(itemTotal)} ₪</td>
                         <td class="px-6 py-4 text-center print:hidden">
                             <button onclick="deleteEntryWithUndo(${entry.id}, this)" class="text-red-400 hover:text-red-600 transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
                         </td>
@@ -594,7 +601,7 @@
                     <i class="fa-solid fa-trash-arrow-up"></i>
                     <span class="text-sm font-bold">החיוב הוסר.</span>
                 </div>
-                <button onclick="undoDelete(${entryId}, '${toastId}')" class="bg-yellow-200 hover:bg-yellow-300 text-yellow-800 px-3 py-1.5 rounded-md text-xs font-bold transition-colors">בטל מחיקה</button>
+                <button onclick="undoDelete(${entryId}, '${toastId}')" class="bg-yellow-200 hover:bg-yellow-300 text-yellow-800 px-3 py-1.5 rounded-md text-xs font-bold transition-colors">בטל</button>
             `;
             container.appendChild(toast);
 
