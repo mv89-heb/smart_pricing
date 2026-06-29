@@ -10,7 +10,6 @@
     
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
@@ -37,7 +36,6 @@
         @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 0; } }
         
-        /* סגנונות להדפסה חכמה */
         @media print {
             body { background: white; }
             .print\:hidden { display: none !important; }
@@ -61,7 +59,7 @@
             </div>
             <div class="flex items-center gap-3">
                 <button onclick="openDashboard()" class="text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-                    <i class="fa-solid fa-chart-pie text-primary-500"></i> סיכום חודשי
+                    <i class="fa-solid fa-chart-pie text-primary-500"></i> דאשבורד מלא
                 </button>
                 <button onclick="exportMonthlyReport()" class="text-sm font-medium text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors">
                     <i class="fa-solid fa-file-excel"></i> יצוא הנה"ח
@@ -91,7 +89,7 @@
                     <div class="p-5 flex-grow flex flex-col gap-5 overflow-hidden">
                         <form id="product-form" class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
                             <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">שם המוצר</label>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">שם המוצר <span class="text-[10px] text-slate-400 font-normal">(מקף ייצר קטגוריה, לדוג' מזון - לחם)</span></label>
                                 <input type="text" id="prod-name" required class="block w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
                             </div>
                             <div>
@@ -130,9 +128,15 @@
                         <p class="hidden print:block text-slate-500 font-bold text-lg mt-1" id="print-date-display"></p>
                     </div>
                     <div class="flex items-center gap-3 print:hidden">
-                        <button onclick="copyFromYesterday()" class="bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors">
-                            <i class="fa-solid fa-copy"></i> העתק מאתמול
+                        
+                        <button onclick="openTemplatesModal()" class="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors">
+                            <i class="fa-solid fa-layer-group"></i> סלים ותבניות
                         </button>
+
+                        <button onclick="copyFromYesterday()" class="bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors" title="העתק מאתמול">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                        
                         <input type="date" id="current-date" onchange="loadEntriesForDate()" class="block w-full sm:w-48 px-4 py-2 border-2 border-primary-100 rounded-xl font-bold text-primary-700 bg-primary-50 outline-none cursor-pointer">
                     </div>
                 </div>
@@ -172,7 +176,7 @@
                     <div class="px-6 pt-4 pb-2 print:hidden bg-white">
                         <div class="relative">
                             <i class="fa-solid fa-magnifying-glass absolute right-3 top-3 text-slate-400"></i>
-                            <input type="text" id="live-search" onkeyup="filterTable()" placeholder="סנן מוצרים בטבלה זו..." class="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-400">
+                            <input type="text" id="live-search" onkeyup="filterTable()" placeholder="סנן חיובים..." class="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-400">
                         </div>
                     </div>
 
@@ -200,7 +204,7 @@
                         </div>
                         <div class="flex gap-3 print:hidden w-full sm:w-auto">
                             <button onclick="shareWhatsApp()" class="flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white border border-green-400 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
-                                <i class="fa-brands fa-whatsapp text-lg"></i> שתף דיווח
+                                <i class="fa-brands fa-whatsapp text-lg"></i> שתף
                             </button>
                             <button onclick="window.print()" class="flex-1 sm:flex-none bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
                                 <i class="fa-solid fa-print"></i> הדפס
@@ -213,21 +217,38 @@
         </div>
     </main>
 
-    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none print:hidden"></div>
+    <div id="templates-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300" id="templates-content">
+            <div class="bg-indigo-600 p-5 flex justify-between items-center text-white">
+                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-layer-group"></i> ניהול סלים ותבניות</h3>
+                <button onclick="closeTemplatesModal()" class="text-indigo-200 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6">
+                <button onclick="saveCurrentDayAsTemplate()" class="w-full bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 py-3 rounded-xl font-bold mb-6 flex justify-center items-center gap-2 transition-colors">
+                    <i class="fa-solid fa-floppy-disk"></i> שמור את היום הנוכחי כתבנית
+                </button>
+                
+                <h4 class="text-sm font-bold text-slate-500 mb-3 border-b pb-2">תבניות שמורות:</h4>
+                <div id="templates-list" class="space-y-2 max-h-48 overflow-y-auto">
+                    </div>
+            </div>
+        </div>
+    </div>
 
     <div id="dashboard-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="dashboard-content">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="dashboard-content">
             <div class="bg-slate-800 p-5 flex justify-between items-center text-white shrink-0">
-                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-chart-pie text-primary-400"></i> סיכום חודשי - <span id="dash-month-title"></span></h3>
+                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-chart-pie text-primary-400"></i> אנליטיקה ודאשבורד חודשי - <span id="dash-month-title"></span></h3>
                 <button onclick="closeDashboard()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
-            <div class="p-6 overflow-y-auto">
+            
+            <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
                 
-                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+                <div class="bg-white border border-slate-200 rounded-xl p-4 mb-6 shadow-sm">
                     <div class="flex justify-between items-end mb-2">
                         <div>
                             <label class="block text-xs font-bold text-slate-500 mb-1">תקציב יעד חודשי (₪):</label>
-                            <input type="number" id="budget-input" placeholder="לדוג' 10000" oninput="updateBudgetProgress()" class="px-3 py-1 text-sm border rounded-lg w-32 focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                            <input type="number" id="budget-input" placeholder="לדוג' 10000" oninput="updateBudgetProgress()" class="px-3 py-1 text-sm border rounded-lg w-32 focus:ring-2 focus:ring-primary-500 outline-none bg-slate-50">
                         </div>
                         <div class="text-left text-sm font-bold text-slate-700" id="budget-percentage-text">0% נוצלו</div>
                     </div>
@@ -236,48 +257,66 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4 mb-6">
-                    <div class="bg-primary-50 rounded-xl p-4 border border-primary-100">
-                        <p class="text-sm font-medium text-primary-600 mb-1">חיוב שוטף</p>
-                        <p class="text-2xl font-bold text-primary-800"><span id="dash-regular-total">0</span> ₪</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div class="bg-primary-50 rounded-xl p-3 border border-primary-100">
+                                <p class="text-xs font-medium text-primary-600 mb-1">חיוב שוטף</p>
+                                <p class="text-xl font-bold text-primary-800"><span id="dash-regular-total">0</span> ₪</p>
+                            </div>
+                            <div class="bg-orange-50 rounded-xl p-3 border border-orange-100">
+                                <p class="text-xs font-medium text-orange-600 mb-1">חריגות אקסטרה</p>
+                                <p class="text-xl font-bold text-orange-800"><span id="dash-extra-total">0</span> ₪</p>
+                            </div>
+                        </div>
+                        <div class="flex-grow relative min-h-[150px]">
+                            <canvas id="dashboardChart"></canvas>
+                        </div>
                     </div>
-                    <div class="bg-orange-50 rounded-xl p-4 border border-orange-100">
-                        <p class="text-sm font-medium text-orange-600 mb-1">חריגות (אקסטרה)</p>
-                        <p class="text-2xl font-bold text-orange-800"><span id="dash-extra-total">0</span> ₪</p>
+
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                        <div class="bg-slate-800 text-white rounded-xl p-4 mb-4 text-center">
+                            <p class="text-xs font-medium text-slate-300 mb-1">תחזית תקציב לסוף החודש (לפי קצב נוכחי)</p>
+                            <p class="text-3xl font-extrabold text-white"><span id="dash-forecast">0</span> ₪</p>
+                        </div>
+                        <h4 class="text-sm font-bold text-slate-600 mb-2">5 המוצרים היקרים החודש</h4>
+                        <div class="flex-grow relative min-h-[150px]">
+                            <canvas id="topProductsChart"></canvas>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="mb-6 h-48 relative">
-                    <canvas id="dashboardChart"></canvas>
+
                 </div>
 
-                <div class="bg-slate-100 rounded-xl p-4 text-center">
-                    <p class="text-sm font-medium text-slate-500 mb-1">סה"כ לתשלום החודש</p>
+                <div class="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm">
+                    <p class="text-sm font-medium text-slate-500 mb-1">סה"כ לתשלום החודש בפועל</p>
                     <p class="text-4xl font-extrabold text-slate-800"><span id="dash-grand-total">0</span> ₪</p>
                 </div>
-                
-                <button onclick="exportMonthlyReport()" class="w-full mt-6 flex justify-center items-center gap-2 bg-green-600 text-white hover:bg-green-700 py-3 rounded-xl font-bold transition-colors">
-                    <i class="fa-solid fa-file-excel"></i> הורד אקסל מלא להנה"ח
+            </div>
+            
+            <div class="p-5 border-t border-slate-100 bg-white shrink-0">
+                <button onclick="exportMonthlyReport()" class="w-full flex justify-center items-center gap-2 bg-green-600 text-white hover:bg-green-700 py-3 rounded-xl font-bold transition-colors">
+                    <i class="fa-solid fa-file-excel"></i> הורד דוח מלא לאקסל
                 </button>
             </div>
         </div>
     </div>
 
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none print:hidden"></div>
+
     <script>
         let products = {};
         let ts; 
         let dashboardChartInstance = null; 
-        let currentGrandTotal = 0; // נשמר עבור מד התקציב
+        let topProductsChartInstance = null;
+        let currentGrandTotal = 0; 
         
         const today = new Date();
         const dateStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         document.getElementById('current-date').value = dateStr;
 
-        // טעינת תקציב שמור עם פתיחת המערכת
         const savedBudget = localStorage.getItem('monthly_budget');
-        if (savedBudget) {
-            document.getElementById('budget-input').value = savedBudget;
-        }
+        if (savedBudget) document.getElementById('budget-input').value = savedBudget;
 
         function formatMoney(amount) {
             return amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -286,14 +325,10 @@
         async function apiFetch(url, options = {}) {
             try {
                 const res = await fetch(url, options);
-                if (res.status === 401) {
-                    window.location.href = '/login'; 
-                    return null;
-                }
+                if (res.status === 401) { window.location.href = '/login'; return null; }
                 return res;
             } catch (err) {
-                showToast('שגיאת תקשורת', 'error');
-                return null;
+                showToast('שגיאת תקשורת', 'error'); return null;
             }
         }
 
@@ -321,6 +356,7 @@
             loadEntriesForDate();
         }
 
+        // פיצ'ר חדש: קטגוריות חכמות במחירון
         function renderProducts() {
             const tbody = document.getElementById('price-list-table-body');
             const select = document.getElementById('entry-prod-select-ui');
@@ -328,6 +364,8 @@
             tbody.innerHTML = '';
             if (ts) { ts.destroy(); ts = null; }
             select.innerHTML = '<option value="">בחר מוצר...</option>';
+
+            const categories = {};
 
             Object.keys(products).sort().forEach(name => {
                 tbody.innerHTML += `
@@ -339,16 +377,31 @@
                         </td>
                     </tr>`;
                 
-                const opt = document.createElement('option');
-                opt.value = name;
-                opt.textContent = name;
-                select.appendChild(opt);
+                // זיהוי קטגוריה אוטומטי לפי מקף
+                let cat = 'כללי';
+                if (name.includes('-')) cat = name.split('-')[0].trim();
+                
+                if (!categories[cat]) categories[cat] = [];
+                categories[cat].push(name);
+            });
+
+            // יצירת קבוצות בתיבת הבחירה
+            Object.keys(categories).sort().forEach(cat => {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = cat;
+                categories[cat].sort().forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name; // מציג שם מלא
+                    optgroup.appendChild(opt);
+                });
+                select.appendChild(optgroup);
             });
 
             ts = new TomSelect("#entry-prod-select-ui", {
                 create: false,
                 sortField: { field: "text", direction: "asc" },
-                onChange: function() { updateLivePreview(); } // תמיכה בחישוב חי בבחירה
+                onChange: function() { updateLivePreview(); } 
             });
         }
 
@@ -419,6 +472,7 @@
         }
 
         function renderEntries(entries) {
+            window.currentDayEntries = entries; // שמירה בזיכרון עבור מערכת התבניות
             const tbody = document.getElementById('entries-table-body');
             tbody.innerHTML = '';
             let total = 0;
@@ -444,7 +498,94 @@
             document.getElementById('daily-total').textContent = formatMoney(total);
         }
 
-        // פיצ'ר חדש: מצב פוקוס
+        // --- פיצ'ר חדש: מערכת תבניות חכמה (LocalStorage) ---
+        function openTemplatesModal() {
+            renderTemplatesList();
+            const modal = document.getElementById('templates-modal');
+            const content = document.getElementById('templates-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function closeTemplatesModal() {
+            const modal = document.getElementById('templates-modal');
+            const content = document.getElementById('templates-content');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        function renderTemplatesList() {
+            const list = document.getElementById('templates-list');
+            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            list.innerHTML = '';
+            
+            if(Object.keys(templates).length === 0) {
+                list.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">אין תבניות שמורות עדיין.</p>';
+                return;
+            }
+
+            Object.keys(templates).forEach(name => {
+                const itemsCount = templates[name].length;
+                list.innerHTML += `
+                    <div class="flex items-center justify-between bg-slate-50 border border-slate-200 p-3 rounded-lg">
+                        <div>
+                            <p class="font-bold text-sm text-slate-700">${name}</p>
+                            <p class="text-xs text-slate-500">${itemsCount} מוצרים בתבנית</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="loadTemplate('${name}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-xs font-bold transition-colors">טען סל</button>
+                            <button onclick="deleteTemplate('${name}')" class="text-red-400 hover:text-red-600 px-2 transition-colors"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        async function saveCurrentDayAsTemplate() {
+            if (!window.currentDayEntries || window.currentDayEntries.length === 0) {
+                return showToast('אין חיובים לשמור ביום זה', 'error');
+            }
+            const name = prompt('הזן שם לתבנית החדשה (לדוגמה: פריסת בוקר - אנגלית):');
+            if (!name) return;
+
+            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            templates[name] = window.currentDayEntries.map(e => ({ product_name: e.product_name, quantity: e.quantity, is_extra: e.is_extra }));
+            localStorage.setItem('billing_templates', JSON.stringify(templates));
+            
+            showToast('התבנית נשמרה בהצלחה!');
+            renderTemplatesList();
+        }
+
+        async function loadTemplate(name) {
+            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            const items = templates[name];
+            if (!items) return;
+
+            const date = document.getElementById('current-date').value;
+            if(!confirm(`האם לטעון את תבנית "${name}" לתאריך הנוכחי?`)) return;
+
+            showToast('טוען תבנית למערכת...', 'success');
+            for (const item of items) {
+                await apiFetch('/api/entries', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ date, product_name: item.product_name, quantity: item.quantity, is_extra: item.is_extra })
+                });
+            }
+            showToast('התבנית נטענה במלואה!');
+            loadEntriesForDate();
+            closeTemplatesModal();
+        }
+
+        function deleteTemplate(name) {
+            if(!confirm(`למחוק את התבנית "${name}"?`)) return;
+            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            delete templates[name];
+            localStorage.setItem('billing_templates', JSON.stringify(templates));
+            renderTemplatesList();
+        }
+        // -----------------------------------------------------------
+
         function toggleFocusMode() {
             const rightPanel = document.getElementById('right-panel');
             const leftPanel = document.getElementById('left-panel');
@@ -459,7 +600,6 @@
             }
         }
 
-        // פיצ'ר חדש: חישוב מקדים בזמן אמת
         function updateLivePreview() {
             const prodName = document.getElementById('entry-prod-select-ui').value;
             const qty = parseFloat(document.getElementById('entry-qty').value) || 0;
@@ -467,21 +607,16 @@
             
             if (prodName && products[prodName] && qty > 0) {
                 const total = products[prodName] * qty;
-                previewBox.textContent = `= ${formatMoney(total)} ₪`;
+                previewBox.textContent = `= סה"כ ${formatMoney(total)} ₪`;
             } else {
                 previewBox.textContent = '';
             }
         }
 
-        // פיצ'ר חדש: ייצוא לוואטסאפ
         function shareWhatsApp() {
             const dateStr = document.getElementById('print-date-display').textContent.replace('תאריך: ', '');
             const total = document.getElementById('daily-total').textContent;
-            
-            let msg = `*דוח חיובי מכללה יומי* 📊\nתאריך: ${dateStr}\n\n`;
-            msg += `סה"כ הוצאות ליום זה: *${total} ₪*\n\n`;
-            msg += `_הופק אוטומטית ממערכת הניהול_`;
-            
+            let msg = `*דוח חיובי מכללה יומי* 📊\nתאריך: ${dateStr}\n\nסה"כ הוצאות ליום זה: *${total} ₪*\n\n_הופק אוטומטית ממערכת הניהול_`;
             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
         }
 
@@ -512,16 +647,12 @@
             if(!confirm(`האם להעתיק ${entries.length} חיובים מתאריך האתמול?`)) return;
 
             showToast('מעתיק נתונים...', 'success');
-            
             for (const entry of entries) {
                 await apiFetch('/api/entries', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        date: currentStr,
-                        product_name: entry.product_name,
-                        quantity: entry.quantity,
-                        is_extra: entry.is_extra
+                        date: currentStr, product_name: entry.product_name, quantity: entry.quantity, is_extra: entry.is_extra
                     })
                 });
             }
@@ -562,10 +693,7 @@
         async function deleteEntry(entryId) {
             if(confirm('להסיר חיוב זה מהתאריך הנוכחי?')) {
                 const res = await apiFetch(`/api/entries/${entryId}`, { method: 'DELETE' });
-                if (res && res.ok) {
-                    showToast('החיוב הוסר', 'success');
-                    loadEntriesForDate();
-                }
+                if (res && res.ok) { showToast('החיוב הוסר', 'success'); loadEntriesForDate(); }
             }
         }
 
@@ -577,7 +705,6 @@
             return res ? { month, entries: await res.json() } : null;
         }
 
-        // פיצ'ר חדש: עדכון מד התקציב
         function updateBudgetProgress() {
             const budgetVal = document.getElementById('budget-input').value;
             localStorage.setItem('monthly_budget', budgetVal);
@@ -588,8 +715,7 @@
             if (!budgetVal || budgetVal <= 0 || currentGrandTotal === 0) {
                 bar.style.width = '0%';
                 bar.className = 'bg-primary-500 h-full transition-all duration-500';
-                text.textContent = 'הזן תקציב לחישוב';
-                return;
+                text.textContent = 'הזן תקציב לחישוב'; return;
             }
 
             const percentage = (currentGrandTotal / budgetVal) * 100;
@@ -605,57 +731,73 @@
 
         async function openDashboard() {
             const data = await fetchMonthlyData();
-            if(!data || data.entries.length === 0) {
-                return showToast('אין נתונים להצגה בחודש זה', 'error');
-            }
+            if(!data || data.entries.length === 0) return showToast('אין נתונים להצגה בחודש זה', 'error');
 
-            let regularTotal = 0;
-            let extraTotal = 0;
+            let regularTotal = 0; let extraTotal = 0;
+            const productTotals = {}; // חישוב לטופ 5
 
             data.entries.forEach(e => {
                 const price = products[e.product_name] || 0;
                 const total = price * e.quantity;
-                if(e.is_extra) extraTotal += total;
-                else regularTotal += total;
+                if(e.is_extra) extraTotal += total; else regularTotal += total;
+                
+                productTotals[e.product_name] = (productTotals[e.product_name] || 0) + total;
             });
 
             currentGrandTotal = regularTotal + extraTotal;
 
+            // עדכון נתוני טקסט
             document.getElementById('dash-month-title').textContent = data.month;
             document.getElementById('dash-regular-total').textContent = formatMoney(regularTotal);
             document.getElementById('dash-extra-total').textContent = formatMoney(extraTotal);
             document.getElementById('dash-grand-total').textContent = formatMoney(currentGrandTotal);
 
-            updateBudgetProgress(); // עדכון פס התקציב בעת פתיחת החלון
-
-            const ctx = document.getElementById('dashboardChart').getContext('2d');
-            if (dashboardChartInstance) dashboardChartInstance.destroy();
+            // פיצ'ר חדש: תחזית הוצאות חודשית
+            const [yearStr, monthStr] = data.month.split('-');
+            const year = parseInt(yearStr), month = parseInt(monthStr);
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const today = new Date();
+            let daysPassed = daysInMonth;
+            if (today.getFullYear() === year && (today.getMonth() + 1) === month) daysPassed = today.getDate() || 1;
             
-            dashboardChartInstance = new Chart(ctx, {
+            const forecast = Math.round((currentGrandTotal / daysPassed) * daysInMonth);
+            document.getElementById('dash-forecast').textContent = formatMoney(forecast);
+
+            updateBudgetProgress();
+
+            // גרף עוגה קיים
+            const ctxDoughnut = document.getElementById('dashboardChart').getContext('2d');
+            if (dashboardChartInstance) dashboardChartInstance.destroy();
+            dashboardChartInstance = new Chart(ctxDoughnut, {
                 type: 'doughnut',
                 data: {
-                    labels: ['הוצאות שוטפות', 'חריגות אקסטרה'],
-                    datasets: [{
-                        data: [regularTotal, extraTotal],
-                        backgroundColor: ['#4f46e5', '#f97316'],
-                        borderWidth: 0,
-                        hoverOffset: 4
-                    }]
+                    labels: ['שוטפות', 'אקסטרה'],
+                    datasets: [{ data: [regularTotal, extraTotal], backgroundColor: ['#4f46e5', '#f97316'], borderWidth: 0 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { family: 'Heebo' } } } } }
+            });
+
+            // פיצ'ר חדש: גרף TOP 5 עמודות
+            const sortedProducts = Object.entries(productTotals).sort((a,b) => b[1] - a[1]).slice(0, 5);
+            const ctxBar = document.getElementById('topProductsChart').getContext('2d');
+            if (topProductsChartInstance) topProductsChartInstance.destroy();
+            topProductsChartInstance = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: sortedProducts.map(p => p[0]),
+                    datasets: [{ label: 'סה"כ ₪', data: sortedProducts.map(p => p[1]), backgroundColor: '#6366f1', borderRadius: 4 }]
                 },
                 options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom', labels: { font: { family: 'Heebo' } } } }
+                    responsive: true, maintainAspectRatio: false, 
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
                 }
             });
 
             const modal = document.getElementById('dashboard-modal');
             const content = document.getElementById('dashboard-content');
             modal.classList.remove('hidden');
-            setTimeout(() => {
-                modal.classList.remove('opacity-0');
-                content.classList.remove('scale-95');
-            }, 10);
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
         }
 
         function closeDashboard() {
@@ -668,35 +810,25 @@
 
         async function exportMonthlyReport() {
             const data = await fetchMonthlyData();
-            if(!data || data.entries.length === 0) return showToast('אין נתונים להפקת דוח', 'error');
+            if(!data || data.entries.length === 0) return showToast('אין נתונים', 'error');
 
             let csvContent = '\uFEFFתאריך,סוג חיוב,שם המוצר,כמות,מחיר יחידה (ש"ח),סה"כ לתשלום (ש"ח)\n';
             data.entries.sort((a,b) => a.date.localeCompare(b.date));
-
-            let regularTotal = 0, extraTotal = 0;
+            let regTotal = 0, extTotal = 0;
 
             data.entries.forEach(e => {
                 const price = products[e.product_name] || 0;
                 const total = price * e.quantity;
                 const typeStr = e.is_extra ? 'אקסטרה' : 'שוטף';
-                if(e.is_extra) extraTotal += total; else regularTotal += total;
+                if(e.is_extra) extTotal += total; else regTotal += total;
                 csvContent += `${e.date},${typeStr},${e.product_name},${e.quantity},${price.toFixed(2)},${total.toFixed(2)}\n`;
             });
 
-            csvContent += `\n,,,סיכום חיובי שוטף:,${regularTotal.toFixed(2)}\n`;
-            csvContent += `,,,סיכום חיובי אקסטרה:,${extraTotal.toFixed(2)}\n`;
-            csvContent += `,,,סה"כ כללי לתשלום:,${(regularTotal + extraTotal).toFixed(2)}\n`;
-
+            csvContent += `\n,,,סיכום חיובי שוטף:,${regTotal.toFixed(2)}\n,,,סיכום חיובי אקסטרה:,${extTotal.toFixed(2)}\n,,,סה"כ כללי לתשלום:,${(regTotal + extTotal).toFixed(2)}\n`;
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `דוח_חיובים_${data.month}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            showToast('הדוח ירד בהצלחה!');
-            closeDashboard();
+            const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `דוח_חיובים_${data.month}.csv`;
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            showToast('הדוח ירד בהצלחה!'); closeDashboard();
         }
 
         loadProducts();
