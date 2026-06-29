@@ -16,7 +16,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # ---------------------------------------------------------
-# מודלים קיימים - ללא שום שינוי! (Backward Compatible)
+# טבלאות קיימות - לא נוגעים! (Backward Compatible)
 # ---------------------------------------------------------
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -31,14 +31,14 @@ class DailyEntry(db.Model):
     is_extra = db.Column(db.Boolean, default=False)
 
 # ---------------------------------------------------------
-# מודלים מורחבים וחדשים (Additive Only)
+# טבלאות חדשות בלבד - מתווספות למסד הקיים (Additive)
 # ---------------------------------------------------------
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     action = db.Column(db.String(50), nullable=False) 
     details = db.Column(db.String(255), nullable=False)
-    username = db.Column(db.String(100), default='מערכת') # עמודה חדשה עם ערך דיפולט
+    username = db.Column(db.String(100), default='מערכת')
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -46,14 +46,19 @@ class User(db.Model):
     password = db.Column(db.String(100), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='viewer') # admin, editor, viewer
 
-# יצירת טבלאות ויצירת משתמש מנהל ראשוני אם הטבלה ריקה
+# הזרקת הטבלאות החדשות באופן מפורש למסד הנתונים הקיים
 with app.app_context():
+    # פקודות אלו מבטיחות שהטבלאות ייווצרו אם הן חסרות, בלי לפגוע בטבלאות הקיימות
+    User.__table__.create(db.engine, checkfirst=True)
+    ActivityLog.__table__.create(db.engine, checkfirst=True)
     db.create_all()
-    # יצירת מנהל מערכת ראשוני אם אין משתמשים בכלל
+    
+    # יצירת מנהל מערכת ראשוני אם הטבלה נוצרה הרגע והיא ריקה
     if User.query.count() == 0:
         default_admin = User(username='admin', password='password123', role='admin')
         db.session.add(default_admin)
         db.session.commit()
+        print("DEBUG: נוצר משתמש מנהל ראשוני (admin / password123)")
 
 def log_activity(action, details):
     try:
@@ -65,7 +70,7 @@ def log_activity(action, details):
         db.session.rollback()
 
 # ---------------------------------------------------------
-# מנגנון הרשאות ואבטחה מבוסס תפקידים (RBAC)
+# הרשאות
 # ---------------------------------------------------------
 @app.before_request
 def require_login():
@@ -85,7 +90,7 @@ def is_viewer():
     return get_current_role() == 'viewer'
 
 # ---------------------------------------------------------
-# נתיבי תצוגה והתחברות
+# נתיבים וממשק
 # ---------------------------------------------------------
 @app.route('/')
 def index():
@@ -100,27 +105,23 @@ def login():
     username = data.get('username')
     password = data.get('password')
     
-    # בדיקה מול טבלת המשתמשים החדשה
     user = User.query.filter_by(username=username, password=password).first()
 
     if user:
         session['logged_in'] = True
         session['username'] = user.username
         session['role'] = user.role
-        log_activity('LOGIN', f"משתמש התחבר בהצלחה ברמת {user.role}")
+        log_activity('LOGIN', f"התחברות למערכת")
         return jsonify({"success": True, "role": user.role, "username": user.username})
 
     return jsonify({"success": False, "message": "שם משתמש או סיסמה שגויים"}), 401
 
 @app.route('/logout')
 def logout():
-    log_activity('LOGOUT', f"משתמש התנתק מהמערכת")
+    log_activity('LOGOUT', f"התנתקות מהמערכת")
     session.clear()
     return redirect(url_for('login'))
 
-# ---------------------------------------------------------
-# API לניהול נתונים פיננסיים (מוצרים וחיובים)
-# ---------------------------------------------------------
 @app.route('/api/products', methods=['GET'])
 def get_products():
     try:
@@ -131,8 +132,7 @@ def get_products():
 
 @app.route('/api/products', methods=['POST'])
 def add_product():
-    if is_viewer(): 
-        return jsonify({"success": False, "error": "אין הרשאות עדכון לצופה"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות עדכון"}), 403
     data = request.json
     try:
         product = Product.query.filter_by(name=data['name']).first()
@@ -151,8 +151,7 @@ def add_product():
 
 @app.route('/api/products/<name>', methods=['DELETE'])
 def delete_product(name):
-    if is_viewer(): 
-        return jsonify({"success": False, "error": "אין הרשאות מחיקה לצופה"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
     try:
         product = Product.query.filter_by(name=name).first()
         if product:
@@ -174,8 +173,7 @@ def get_entries(date):
 
 @app.route('/api/entries', methods=['POST'])
 def add_entry():
-    if is_viewer(): 
-        return jsonify({"success": False, "error": "אין הרשאות הזנה לצופה"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות הזנה"}), 403
     data = request.json
     try:
         date, product_name, quantity, is_extra = data['date'], data['product_name'], float(data['quantity']), data.get('is_extra', False)
@@ -195,8 +193,7 @@ def add_entry():
 
 @app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
 def delete_entry(entry_id):
-    if is_viewer(): 
-        return jsonify({"success": False, "error": "אין הרשאות מחיקה לצופה"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
     try:
         entry = DailyEntry.query.get(entry_id)
         if entry:
@@ -217,7 +214,7 @@ def get_monthly_report(year_month):
         return jsonify({"error": str(e)}), 500
 
 # ---------------------------------------------------------
-# API חדש לניהול משתמשים ופיקוח (עבור מנהל בלבד)
+# API של מנהלים (משתמשים ולוגים)
 # ---------------------------------------------------------
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
@@ -249,7 +246,7 @@ def create_or_update_user():
             log_activity('UPDATE_USER', f"עדכון משתמש: {data['username']} לתפקיד {data['role']}")
         else:
             db.session.add(User(username=data['username'], password=data['password'], role=data['role']))
-            log_activity('CREATE_USER', f"משתמש חדש נוצר: {data['username']} ברמת {data['role']}")
+            log_activity('CREATE_USER', f"משתמש חדש: {data['username']} ({data['role']})")
         db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError as e:
