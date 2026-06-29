@@ -78,10 +78,14 @@
 
             <div class="lg:col-span-4 flex flex-col gap-6 print:hidden">
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-140px)] sticky top-24">
-                    <div class="p-5 border-b border-slate-100 bg-slate-50/50">
+                    
+                    <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                         <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-                            <i class="fa-solid fa-tags text-primary-500"></i> מחירון מוצרים
+                            <i class="fa-solid fa-tags text-primary-500"></i> מחירון
                         </h2>
+                        <button onclick="bulkUpdatePrices()" class="text-xs font-bold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1" title="עדכון מחירון באחוזים">
+                            <i class="fa-solid fa-arrow-trend-up"></i> עדכון גורף
+                        </button>
                     </div>
 
                     <div class="p-5 flex-grow flex flex-col gap-5 overflow-hidden">
@@ -238,19 +242,16 @@
     <script>
         let products = {};
         let ts; 
-        let dashboardChartInstance = null; // משתנה לגרף
+        let dashboardChartInstance = null; 
         
-        // הגדרת תאריך מדוייק לזמן מקומי
         const today = new Date();
         const dateStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         document.getElementById('current-date').value = dateStr;
 
-        // פונקציית עזר לעיצוב מטבע
         function formatMoney(amount) {
             return amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
-        // פונקציית מעטפת ל-Fetch
         async function apiFetch(url, options = {}) {
             try {
                 const res = await fetch(url, options);
@@ -319,6 +320,49 @@
             });
         }
 
+        // --- הפונקציה החדשה: עדכון מחירון גורף באחוזים ---
+        async function bulkUpdatePrices() {
+            if (Object.keys(products).length === 0) {
+                return showToast('המחירון ריק, אין מה לעדכן.', 'error');
+            }
+
+            const percentStr = prompt('הזן אחוז לעדכון גורף של כל המחירון\n(לדוגמה: 5 להוספת 5%, או -5 להורדת 5%):');
+            if (!percentStr) return; // המשתמש לחץ ביטול
+
+            const percent = parseFloat(percentStr);
+            if (isNaN(percent)) {
+                return showToast('נא להזין מספר תקין', 'error');
+            }
+
+            if (!confirm(`האם אתה בטוח שברצונך לעדכן את כל ${Object.keys(products).length} המוצרים ב-${percent}%?\nפעולה זו תעדכן את השרת מיידית.`)) {
+                return;
+            }
+
+            showToast('מעדכן מחירים, אנא המתן...', 'success');
+            
+            let successCount = 0;
+            
+            // לולאה על כל המוצרים הקיימים ושליחת עדכון לכל אחד
+            for (const [name, oldPrice] of Object.entries(products)) {
+                // חישוב המחיר החדש ועיגול לשתי ספרות אחרי הנקודה (כמו 8.52)
+                const newPrice = Math.round(oldPrice * (1 + (percent / 100)) * 100) / 100;
+                
+                const res = await apiFetch('/api/products', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ name: name, price: newPrice }) 
+                });
+                
+                if (res && res.ok) {
+                    successCount++;
+                }
+            }
+            
+            showToast(`עודכנו בהצלחה ${successCount} מוצרים!`);
+            loadProducts(); // רענון המחירון מהשרת לאחר הסיום
+        }
+        // ------------------------------------------------
+
         document.getElementById('product-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('product-submit-btn');
@@ -355,11 +399,8 @@
             const date = document.getElementById('current-date').value;
             if (!date) return;
             
-            // עדכון תצוגת תאריך עבור הדפסה
             const dateParts = date.split('-');
             document.getElementById('print-date-display').textContent = `תאריך: ${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-            
-            // איפוס חיפוש
             document.getElementById('live-search').value = '';
 
             const res = await apiFetch(`/api/entries/${date}`);
@@ -392,7 +433,6 @@
             document.getElementById('daily-total').textContent = formatMoney(total);
         }
 
-        // פונקציית סינון חי
         function filterTable() {
             const input = document.getElementById('live-search').value.toLowerCase();
             const rows = document.querySelectorAll('.table-row-item');
@@ -404,7 +444,6 @@
             });
         }
 
-        // פונקציית העתקת נתונים מאתמול
         async function copyFromYesterday() {
             const currentStr = document.getElementById('current-date').value;
             if (!currentStr) return;
@@ -427,7 +466,6 @@
 
             showToast('מעתיק נתונים...', 'success');
             
-            // שולח את כל הרשומות ברצף
             for (const entry of entries) {
                 await apiFetch('/api/entries', {
                     method: 'POST',
@@ -516,7 +554,6 @@
             document.getElementById('dash-extra-total').textContent = formatMoney(extraTotal);
             document.getElementById('dash-grand-total').textContent = formatMoney(regularTotal + extraTotal);
 
-            // רינדור הגרף
             const ctx = document.getElementById('dashboardChart').getContext('2d');
             if (dashboardChartInstance) dashboardChartInstance.destroy();
             
@@ -526,7 +563,7 @@
                     labels: ['הוצאות שוטפות', 'חריגות אקסטרה'],
                     datasets: [{
                         data: [regularTotal, extraTotal],
-                        backgroundColor: ['#4f46e5', '#f97316'], // צבעי האינדיגו והכתום של המערכת
+                        backgroundColor: ['#4f46e5', '#f97316'],
                         borderWidth: 0,
                         hoverOffset: 4
                     }]
