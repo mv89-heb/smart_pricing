@@ -1,24 +1,23 @@
 import os
-from flask import Flask, render_template, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from flask_basicauth import BasicAuth
+from flask import Flask, render_template, request, jsonify, session, redirect, url_base
 
 app = Flask(__name__)
 
-# --- הגדרות סיסמה למערכת (Basic Auth) ---
-app.config['BASIC_AUTH_USERNAME'] = os.environ.get('AUTH_USER', 'admin')
-app.config['BASIC_AUTH_PASSWORD'] = os.environ.get('AUTH_PASS', '1234')
-app.config['BASIC_AUTH_FORCE'] = True  # דורש סיסמה בכניסה לאתר
-basic_auth = BasicAuth(app)
+# מפתח אבטחה להצפנת הסשן - חובה ב-Flask
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'super-secret-key-123')
 
-# --- הגדרות מסד נתונים ---
+# שם משתמש וסיסמה ממשתני הסביבה או ברירת מחדל
+AUTH_USER = os.environ.get('AUTH_USER', 'admin')
+AUTH_PASS = os.environ.get('AUTH_PASS', '1234')
+
+# הגדרות מסד נתונים (SQLAlchemy ו-Neon)
+from flask_sqlalchemy import SQLAlchemy
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///local_products.db')
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
 db = SQLAlchemy(app)
 
 class Product(db.Model):
@@ -36,9 +35,37 @@ class DailyEntry(db.Model):
 with app.app_context():
     db.create_all()
 
+# --- מנגנון בדיקת התחברות (Middleware) ---
+@app.before_request
+def require_login():
+    # רשימת נתיבים שמותר לגשת אליהם ללא התחברות
+    allowed_routes = ['login', 'static']
+    if request.endpoint not in allowed_routes and not session.get('logged_in'):
+        return render_template('login.html')
+
+# --- נתיבי המערכת ---
+
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json or {}
+    username = data.get('username')
+    password = data.get('password')
+    
+    if username == AUTH_USER and password == AUTH_PASS:
+        session['logged_in'] = True
+        return jsonify({"success": True})
+    return jsonify({"success": False, "message": "שם משתמש או סיסמה שגויים"}), 401
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/')
+
+# --- APIs לניהול מוצרים וחיובים (כולם מוגנים אוטומטית) ---
 
 @app.route('/api/products', methods=['GET'])
 def get_products():
