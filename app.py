@@ -6,10 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 app = Flask(__name__)
 
-# הגדרת סשן
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-secret-key-for-development')
-
-# התחברות למסד הנתונים (Neon / SQLite)
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///local_products.db')
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -18,9 +15,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# ---------------------------------------------------------
-# מודלים ישנים - ללא שום שינוי! (Backward Compatible)
-# ---------------------------------------------------------
+# --- מודלים ---
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -33,20 +28,15 @@ class DailyEntry(db.Model):
     quantity = db.Column(db.Float, nullable=False)
     is_extra = db.Column(db.Boolean, default=False)
 
-# ---------------------------------------------------------
-# מודל חדש! - יומן פעולות (Audit Log) לא נוגע בקיים
-# ---------------------------------------------------------
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    action = db.Column(db.String(50), nullable=False) # למשל: 'DELETE_ENTRY', 'UPDATE_PRICE'
+    action = db.Column(db.String(50), nullable=False) 
     details = db.Column(db.String(255), nullable=False)
 
-# יצירת טבלאות (ייצור רק את החדשה, הישנות יישארו בשלמותן)
 with app.app_context():
     db.create_all()
 
-# פונקציית עזר לכתיבת לוגים מבלי לעצור את המערכת
 def log_activity(action, details):
     try:
         new_log = ActivityLog(action=action, details=details)
@@ -54,11 +44,7 @@ def log_activity(action, details):
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        print(f"Failed to log activity: {e}")
 
-# ---------------------------------------------------------
-# הגנת התחברות והרשאות (RBAC)
-# ---------------------------------------------------------
 @app.before_request
 def require_login():
     allowed_routes = ['login', 'static']
@@ -68,12 +54,8 @@ def require_login():
         return redirect(url_for('login'))
 
 def is_viewer():
-    """בודק אם המשתמש מחובר במצב קריאה בלבד"""
     return session.get('role') == 'viewer'
 
-# ---------------------------------------------------------
-# נתיבי תצוגה
-# ---------------------------------------------------------
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -87,11 +69,8 @@ def login():
     username = data.get('username')
     password = data.get('password')
     
-    # מנהל ראשי
     admin_user = os.environ.get('AUTH_USER', 'admin')
     admin_pass = os.environ.get('AUTH_PASS', '1234')
-    
-    # מצב צופה/עובד
     viewer_pass = os.environ.get('VIEWER_PASS', '1111') 
 
     if username == admin_user and password == admin_pass:
@@ -114,9 +93,6 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# ---------------------------------------------------------
-# API לניהול נתונים - עם Audit Logs והגנת צופה
-# ---------------------------------------------------------
 @app.route('/api/products', methods=['GET'])
 def get_products():
     try:
@@ -127,9 +103,7 @@ def get_products():
 
 @app.route('/api/products', methods=['POST'])
 def add_product():
-    if is_viewer():
-        return jsonify({"success": False, "error": "אין הרשאות עדכון למחירון"}), 403
-        
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות עדכון"}), 403
     data = request.json
     try:
         product = Product.query.filter_by(name=data['name']).first()
@@ -140,7 +114,6 @@ def add_product():
         else:
             db.session.add(Product(name=data['name'], price=data['price']))
             log_activity('NEW_PRODUCT', f"Product: {data['name']}, Price: {data['price']}")
-            
         db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError as e:
@@ -149,9 +122,7 @@ def add_product():
 
 @app.route('/api/products/<name>', methods=['DELETE'])
 def delete_product(name):
-    if is_viewer():
-        return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
-
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
     try:
         product = Product.query.filter_by(name=name).first()
         if product:
@@ -167,10 +138,7 @@ def delete_product(name):
 def get_entries(date):
     try:
         entries = DailyEntry.query.filter_by(date=date).all()
-        return jsonify([{
-            'id': e.id, 'product_name': e.product_name, 
-            'quantity': e.quantity, 'is_extra': e.is_extra
-        } for e in entries])
+        return jsonify([{'id': e.id, 'product_name': e.product_name, 'quantity': e.quantity, 'is_extra': e.is_extra} for e in entries])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -178,11 +146,7 @@ def get_entries(date):
 def add_entry():
     data = request.json
     try:
-        date = data['date']
-        product_name = data['product_name']
-        quantity = float(data['quantity'])
-        is_extra = data.get('is_extra', False)
-        
+        date, product_name, quantity, is_extra = data['date'], data['product_name'], float(data['quantity']), data.get('is_extra', False)
         entry = DailyEntry.query.filter_by(date=date, product_name=product_name, is_extra=is_extra).first()
         if entry:
             entry.quantity += quantity
@@ -191,7 +155,6 @@ def add_entry():
             entry = DailyEntry(date=date, product_name=product_name, quantity=quantity, is_extra=is_extra)
             db.session.add(entry)
             log_activity('NEW_ENTRY', f"Added {quantity} x {product_name} on {date}")
-            
         db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError as e:
@@ -200,9 +163,7 @@ def add_entry():
 
 @app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
 def delete_entry(entry_id):
-    if is_viewer():
-        return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
-
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
     try:
         entry = DailyEntry.query.get(entry_id)
         if entry:
@@ -218,10 +179,27 @@ def delete_entry(entry_id):
 def get_monthly_report(year_month):
     try:
         entries = DailyEntry.query.filter(DailyEntry.date.startswith(year_month)).all()
-        return jsonify([{
-            'id': e.id, 'date': e.date, 'product_name': e.product_name,
-            'quantity': e.quantity, 'is_extra': e.is_extra
-        } for e in entries])
+        return jsonify([{'id': e.id, 'date': e.date, 'product_name': e.product_name, 'quantity': e.quantity, 'is_extra': e.is_extra} for e in entries])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- נתיבי מנהל חדשים (פעימה 3) ---
+
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    if is_viewer(): return jsonify({"error": "Unauthorized"}), 403
+    try:
+        logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(100).all()
+        return jsonify([{'time': l.timestamp.strftime('%d/%m/%Y %H:%M'), 'action': l.action, 'details': l.details} for l in logs])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/backup', methods=['GET'])
+def backup_data():
+    if is_viewer(): return jsonify({"error": "Unauthorized"}), 403
+    try:
+        products = {p.name: p.price for p in Product.query.all()}
+        return jsonify({"products": products, "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
