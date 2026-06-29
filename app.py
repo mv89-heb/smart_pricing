@@ -1,11 +1,9 @@
 import os
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
 
 app = Flask(__name__)
 
-# התחברות למסד הנתונים
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///local_products.db')
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -15,20 +13,17 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# --- מודלים של מסד הנתונים ---
-
-# 1. טבלת מחירון בסיס
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     price = db.Column(db.Float, nullable=False)
 
-# 2. טבלת רישום שוטף (לפי תאריך) - חדש!
 class DailyEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.String(20), nullable=False) # שומר תאריך בפורמט YYYY-MM-DD
+    date = db.Column(db.String(20), nullable=False) 
     product_name = db.Column(db.String(100), nullable=False)
     quantity = db.Column(db.Float, nullable=False)
+    is_extra = db.Column(db.Boolean, default=False) # העמודה החדשה!
 
 with app.app_context():
     db.create_all()
@@ -37,7 +32,6 @@ with app.app_context():
 def index():
     return render_template('index.html')
 
-# --- ניהול מחירון ---
 @app.route('/api/products', methods=['GET'])
 def get_products():
     products = Product.query.all()
@@ -62,11 +56,13 @@ def delete_product(name):
         db.session.commit()
     return jsonify({"success": True})
 
-# --- ניהול רישום לפי תאריכים ---
 @app.route('/api/entries/<date>', methods=['GET'])
 def get_entries(date):
     entries = DailyEntry.query.filter_by(date=date).all()
-    return jsonify([{'id': e.id, 'product_name': e.product_name, 'quantity': e.quantity} for e in entries])
+    return jsonify([{
+        'id': e.id, 'product_name': e.product_name, 
+        'quantity': e.quantity, 'is_extra': e.is_extra
+    } for e in entries])
 
 @app.route('/api/entries', methods=['POST'])
 def add_entry():
@@ -74,13 +70,14 @@ def add_entry():
     date = data['date']
     product_name = data['product_name']
     quantity = float(data['quantity'])
+    is_extra = data.get('is_extra', False)
     
-    # אם כבר קיים רישום למוצר הזה באותו תאריך, נוסיף לכמות. אחרת, ניצור חדש.
-    entry = DailyEntry.query.filter_by(date=date, product_name=product_name).first()
+    # חשוב: מפרידים בין מוצר שוטף למוצר אקסטרה גם אם זה אותו מוצר באותו יום
+    entry = DailyEntry.query.filter_by(date=date, product_name=product_name, is_extra=is_extra).first()
     if entry:
         entry.quantity += quantity
     else:
-        entry = DailyEntry(date=date, product_name=product_name, quantity=quantity)
+        entry = DailyEntry(date=date, product_name=product_name, quantity=quantity, is_extra=is_extra)
         db.session.add(entry)
         
     db.session.commit()
@@ -93,6 +90,16 @@ def delete_entry(entry_id):
         db.session.delete(entry)
         db.session.commit()
     return jsonify({"success": True})
+
+# נתיב חדש להפקת דוח חודשי להנהלת חשבונות
+@app.route('/api/report/month/<year_month>', methods=['GET'])
+def get_monthly_report(year_month):
+    # שולף את כל הרשומות שמתחילות בחודש והשנה שביקשנו
+    entries = DailyEntry.query.filter(DailyEntry.date.startswith(year_month)).all()
+    return jsonify([{
+        'id': e.id, 'date': e.date, 'product_name': e.product_name,
+        'quantity': e.quantity, 'is_extra': e.is_extra
+    } for e in entries])
 
 if __name__ == '__main__':
     app.run(debug=True)
