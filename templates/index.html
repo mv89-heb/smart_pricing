@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מערכת חכמה לניהול והצעות מחיר</title>
+    <title>מערכת חכמה לניהול חיובי מכללה</title>
     <style>
         :root { --primary: #4f46e5; --bg: #f8fafc; --card-bg: #ffffff; --text: #1e293b; --border: #e2e8f0; }
-        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; margin: 0; }
         .container { max-width: 1200px; margin: 0 auto; }
         .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
         @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
         .card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid var(--border); }
-        h2 { color: var(--primary); border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+        h2 { color: var(--primary); border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-top: 0;}
         .form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 5px; }
         input, select, button { padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 16px; }
         button { background-color: var(--primary); color: white; border: none; cursor: pointer; font-weight: bold; }
@@ -20,18 +20,19 @@
         th { background-color: #f1f5f9; }
         .total-box { margin-top: 20px; padding: 15px; background: #e0e7ff; border-radius: 8px; font-size: 20px; font-weight: bold; text-align: center; color: var(--primary); }
         .delete-btn { background-color: #ef4444; padding: 5px 10px; font-size: 12px; }
+        .date-picker-box { background: #fef3c7; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #fde68a; display: flex; align-items: center; gap: 10px; font-weight: bold;}
     </style>
 </head>
 <body>
 
 <div class="container">
     <header style="text-align: center; margin-bottom: 30px;">
-        <h1>מערכת חכמה לניהול מוצרים והצעות מחיר (Full-Stack)</h1>
+        <h1>מערכת ניהול חיובי מכללה - לפי תאריכים</h1>
     </header>
 
     <div class="grid">
         <div class="card">
-            <h2>1. מחירון בסיס (מסד נתונים)</h2>
+            <h2>1. מחירון בסיס</h2>
             <form id="product-form">
                 <div class="form-group">
                     <label>שם המוצר:</label>
@@ -41,69 +42,79 @@
                     <label>מחיר יחידה (₪):</label>
                     <input type="number" id="prod-price" step="0.01" required>
                 </div>
-                <button type="submit" style="width: 100%;">שמור בשרת</button>
+                <button type="submit" style="width: 100%;">שמור / עדכן מוצר</button>
             </form>
-            <table id="price-list-table">
-                <thead><tr><th>מוצר</th><th>מחיר</th><th>פעולה</th></tr></thead>
-                <tbody></tbody>
-            </table>
+            <div style="max-height: 400px; overflow-y: auto;">
+                <table id="price-list-table">
+                    <thead><tr><th>מוצר</th><th>מחיר</th><th>פעולה</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
 
         <div class="card">
-            <h2>2. יצירת הצעת מחיר</h2>
-            <form id="invoice-form">
+            <h2>2. הזנת נתונים שוטפת</h2>
+            
+            <div class="date-picker-box">
+                <label for="current-date">בחר תאריך עבודה:</label>
+                <input type="date" id="current-date" onchange="loadEntriesForDate()">
+            </div>
+
+            <form id="entry-form">
                 <div style="display: flex; gap: 10px;">
                     <div class="form-group" style="flex: 2;">
                         <label>בחר מוצר:</label>
-                        <select id="invoice-prod-select" required></select>
+                        <select id="entry-prod-select" required></select>
                     </div>
                     <div class="form-group" style="flex: 1;">
                         <label>כמות:</label>
-                        <input type="number" id="invoice-qty" value="1" min="1" required>
+                        <input type="number" id="entry-qty" step="0.01" value="1" min="0.01" required>
                     </div>
                 </div>
-                <button type="submit" style="width: 100%;">הוסף להצעה</button>
+                <button type="submit" style="width: 100%;">הוסף חיוב לתאריך זה</button>
             </form>
-            <table id="invoice-table">
-                <thead><tr><th>מוצר</th><th>כמות</th><th>מחיר</th><th>סה"כ</th><th>פעולה</th></tr></thead>
+
+            <table id="entries-table">
+                <thead><tr><th>מוצר</th><th>כמות</th><th>מחיר יחידה</th><th>סה"כ</th><th>פעולה</th></tr></thead>
                 <tbody></tbody>
             </table>
-            <div class="total-box">סה"כ: <span id="grand-total">0.00</span> ₪</div>
-            <button onclick="window.print()" style="width: 100%; margin-top: 10px; background-color: #10b981;">הדפס PDF</button>
+            
+            <div class="total-box">סה"כ לתאריך זה: <span id="daily-total">0.00</span> ₪</div>
         </div>
     </div>
 </div>
 
 <script>
     let products = {};
-    let currentInvoice = [];
 
-    // משיכת נתונים מהשרת
+    // הגדרת תאריך להיום כברירת מחדל
+    document.getElementById('current-date').valueAsDate = new Date();
+
+    // טעינת מחירון
     async function loadProducts() {
         const res = await fetch('/api/products');
         products = await res.json();
         renderProducts();
-        renderInvoice(); // רענון מחירים בהצעה
+        loadEntriesForDate(); // טעינת נתונים לתאריך שנבחר מיד אחרי טעינת המחירון
     }
 
     function renderProducts() {
         const tbody = document.querySelector('#price-list-table tbody');
-        const select = document.getElementById('invoice-prod-select');
+        const select = document.getElementById('entry-prod-select');
         tbody.innerHTML = '';
         select.innerHTML = '<option value="">-- בחר מוצר --</option>';
 
         Object.keys(products).sort().forEach(name => {
             tbody.innerHTML += `<tr><td>${name}</td><td>${products[name].toFixed(2)} ₪</td><td><button class="delete-btn" onclick="deleteProduct('${name}')">מחק</button></td></tr>`;
-            select.innerHTML += `<option value="${name}">${name} (${products[name].toFixed(2)} ₪)</option>`;
+            select.innerHTML += `<option value="${name}">${name}</option>`;
         });
     }
 
-    // שמירה לשרת
+    // ניהול מחירון (הוספה/מחיקה)
     document.getElementById('product-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const name = document.getElementById('prod-name').value.trim();
         const price = parseFloat(document.getElementById('prod-price').value);
-        
         await fetch('/api/products', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -113,42 +124,70 @@
         loadProducts();
     });
 
-    // מחיקה מהשרת
     async function deleteProduct(name) {
-        if(confirm(`למחוק את ${name}?`)) {
+        if(confirm(`למחוק את ${name} מהמחירון?`)) {
             await fetch(`/api/products/${name}`, { method: 'DELETE' });
             loadProducts();
         }
     }
 
-    // ניהול הצעת מחיר (נשאר לוקאלית בדפדפן עבור ההדפסה הנוכחית)
-    document.getElementById('invoice-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const name = document.getElementById('invoice-prod-select').value;
-        const qty = parseInt(document.getElementById('invoice-qty').value);
-        if(!name) return;
+    // --- ניהול פעילות לפי תאריך ---
 
-        const existing = currentInvoice.find(i => i.name === name);
-        if(existing) existing.qty += qty;
-        else currentInvoice.push({ name, qty });
+    async function loadEntriesForDate() {
+        const selectedDate = document.getElementById('current-date').value;
+        if (!selectedDate) return;
 
-        renderInvoice();
-        document.getElementById('invoice-qty').value = 1;
-        document.getElementById('invoice-prod-select').value = '';
-    });
+        const res = await fetch(`/api/entries/${selectedDate}`);
+        const entries = await res.json();
+        renderEntries(entries);
+    }
 
-    function renderInvoice() {
-        const tbody = document.querySelector('#invoice-table tbody');
+    function renderEntries(entries) {
+        const tbody = document.querySelector('#entries-table tbody');
         tbody.innerHTML = '';
         let total = 0;
 
-        currentInvoice.forEach((item, index) => {
-            const itemPrice = products[item.name] || 0;
-            const itemTotal = itemPrice * item.qty;
+        entries.forEach(entry => {
+            const price = products[entry.product_name] || 0;
+            const itemTotal = price * entry.quantity;
             total += itemTotal;
-            tbody.innerHTML += `<tr><td>${item.name}</td><td>${item.qty}</td><td>${itemPrice.toFixed(2)} ₪</td><td>${itemTotal.toFixed(2)} ₪</td><td><button class="delete-btn" onclick="currentInvoice.splice(${index}, 1); renderInvoice();">הסר</button></td></tr>`;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${entry.product_name}</td>
+                    <td>${entry.quantity}</td>
+                    <td>${price.toFixed(2)} ₪</td>
+                    <td>${itemTotal.toFixed(2)} ₪</td>
+                    <td><button class="delete-btn" onclick="deleteEntry(${entry.id})">הסר</button></td>
+                </tr>`;
         });
-        document.getElementById('grand-total').textContent = total.toFixed(2);
+        document.getElementById('daily-total').textContent = total.toFixed(2);
+    }
+
+    document.getElementById('entry-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const date = document.getElementById('current-date').value;
+        const product_name = document.getElementById('entry-prod-select').value;
+        const quantity = document.getElementById('entry-qty').value;
+
+        if(!product_name || !date) return;
+
+        await fetch('/api/entries', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ date, product_name, quantity })
+        });
+        
+        document.getElementById('entry-qty').value = 1;
+        document.getElementById('entry-prod-select').value = '';
+        loadEntriesForDate(); // רענון הטבלה
+    });
+
+    async function deleteEntry(entryId) {
+        if(confirm('למחוק את הרישום הזה מהתאריך הנוכחי?')) {
+            await fetch(`/api/entries/${entryId}`, { method: 'DELETE' });
+            loadEntriesForDate();
+        }
     }
 
     // הפעלה ראשונית
