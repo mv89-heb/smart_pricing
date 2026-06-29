@@ -1,6 +1,7 @@
 import os
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import SQLAlchemyError
 
 app = Flask(__name__)
 
@@ -37,19 +38,21 @@ with app.app_context():
 def require_login():
     allowed_routes = ['login', 'static']
     if request.endpoint not in allowed_routes and not session.get('logged_in'):
-        # בדיקה שהקובץ קיים כדי למנוע שגיאת 500
-        if os.path.exists(os.path.join(app.root_path, 'templates', 'login.html')):
-            return render_template('login.html')
-        else:
-            return "מערכת מוגנת: חסר קובץ login.html בתיקיית ה-templates", 500
+        # אם זו בקשת API ברקע, נחזיר שגיאת 401 כדי שהדפדפן ידע לנתב ללוגין
+        if request.path.startswith('/api/'):
+            return jsonify({"error": "Unauthorized"}), 401
+        return redirect(url_for('login'))
 
-# --- נתיבי תצוגה ---
+# --- נתיבי תצוגה והתחברות ---
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
+    if request.method == 'GET':
+        return render_template('login.html')
+        
     data = request.json or {}
     if data.get('username') == os.environ.get('AUTH_USER', 'admin') and \
        data.get('password') == os.environ.get('AUTH_PASS', '1234'):
@@ -60,74 +63,99 @@ def login():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('index'))
+    return redirect(url_for('login'))
 
-# --- API לניהול נתונים (SQL) ---
+# --- API לניהול נתונים (עם טיפול בשגיאות DB) ---
 @app.route('/api/products', methods=['GET'])
 def get_products():
-    products = Product.query.all()
-    return jsonify({p.name: p.price for p in products})
+    try:
+        products = Product.query.all()
+        return jsonify({p.name: p.price for p in products})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/products', methods=['POST'])
 def add_product():
     data = request.json
-    product = Product.query.filter_by(name=data['name']).first()
-    if product:
-        product.price = data['price']
-    else:
-        db.session.add(Product(name=data['name'], price=data['price']))
-    db.session.commit()
-    return jsonify({"success": True})
+    try:
+        product = Product.query.filter_by(name=data['name']).first()
+        if product:
+            product.price = data['price']
+        else:
+            db.session.add(Product(name=data['name'], price=data['price']))
+        db.session.commit()
+        return jsonify({"success": True})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/products/<name>', methods=['DELETE'])
 def delete_product(name):
-    product = Product.query.filter_by(name=name).first()
-    if product:
-        db.session.delete(product)
-        db.session.commit()
-    return jsonify({"success": True})
+    try:
+        product = Product.query.filter_by(name=name).first()
+        if product:
+            db.session.delete(product)
+            db.session.commit()
+        return jsonify({"success": True})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/entries/<date>', methods=['GET'])
 def get_entries(date):
-    entries = DailyEntry.query.filter_by(date=date).all()
-    return jsonify([{
-        'id': e.id, 'product_name': e.product_name, 
-        'quantity': e.quantity, 'is_extra': e.is_extra
-    } for e in entries])
+    try:
+        entries = DailyEntry.query.filter_by(date=date).all()
+        return jsonify([{
+            'id': e.id, 'product_name': e.product_name, 
+            'quantity': e.quantity, 'is_extra': e.is_extra
+        } for e in entries])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/entries', methods=['POST'])
 def add_entry():
     data = request.json
-    date = data['date']
-    product_name = data['product_name']
-    quantity = float(data['quantity'])
-    is_extra = data.get('is_extra', False)
-    
-    entry = DailyEntry.query.filter_by(date=date, product_name=product_name, is_extra=is_extra).first()
-    if entry:
-        entry.quantity += quantity
-    else:
-        entry = DailyEntry(date=date, product_name=product_name, quantity=quantity, is_extra=is_extra)
-        db.session.add(entry)
+    try:
+        date = data['date']
+        product_name = data['product_name']
+        quantity = float(data['quantity'])
+        is_extra = data.get('is_extra', False)
         
-    db.session.commit()
-    return jsonify({"success": True})
+        entry = DailyEntry.query.filter_by(date=date, product_name=product_name, is_extra=is_extra).first()
+        if entry:
+            entry.quantity += quantity
+        else:
+            entry = DailyEntry(date=date, product_name=product_name, quantity=quantity, is_extra=is_extra)
+            db.session.add(entry)
+            
+        db.session.commit()
+        return jsonify({"success": True})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
 def delete_entry(entry_id):
-    entry = DailyEntry.query.get(entry_id)
-    if entry:
-        db.session.delete(entry)
-        db.session.commit()
-    return jsonify({"success": True})
+    try:
+        entry = DailyEntry.query.get(entry_id)
+        if entry:
+            db.session.delete(entry)
+            db.session.commit()
+        return jsonify({"success": True})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/report/month/<year_month>', methods=['GET'])
 def get_monthly_report(year_month):
-    entries = DailyEntry.query.filter(DailyEntry.date.startswith(year_month)).all()
-    return jsonify([{
-        'id': e.id, 'date': e.date, 'product_name': e.product_name,
-        'quantity': e.quantity, 'is_extra': e.is_extra
-    } for e in entries])
+    try:
+        entries = DailyEntry.query.filter(DailyEntry.date.startswith(year_month)).all()
+        return jsonify([{
+            'id': e.id, 'date': e.date, 'product_name': e.product_name,
+            'quantity': e.quantity, 'is_extra': e.is_extra
+        } for e in entries])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
