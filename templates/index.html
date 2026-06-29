@@ -4,10 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מערכת חכמה לניהול חיובי מכללה</title>
+    
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+    
     <script>
         tailwind.config = {
             theme: {
@@ -44,13 +47,16 @@
                     <span class="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-md font-normal"><i class="fa-solid fa-lock text-[10px] text-green-500"></i> מאובטח</span>
                 </h1>
             </div>
-            <div class="flex gap-3">
+            <div class="flex items-center gap-3">
                 <button onclick="openDashboard()" class="text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
                     <i class="fa-solid fa-chart-pie text-primary-500"></i> סיכום חודשי
                 </button>
                 <button onclick="exportMonthlyReport()" class="text-sm font-medium text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors">
                     <i class="fa-solid fa-file-excel"></i> יצוא הנה"ח
                 </button>
+                <a href="/logout" class="text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-right-from-bracket"></i> יציאה
+                </a>
             </div>
         </div>
     </header>
@@ -113,13 +119,14 @@
                     <div class="p-6 border-b border-slate-100 bg-slate-50/50">
                         <form id="entry-form" class="flex flex-col sm:flex-row items-end gap-4">
                             
-                    <div class="w-full sm:w-2/5">
-                        <label class="block text-sm font-medium text-slate-700 mb-1">מוצר שנצרך</label>
-                        <select id="entry-prod-select-ui" required class="w-full">
-                            <option value="">בחר מוצר...</option>
-                        </select>
-                    </div>
-                                                <div class="w-full sm:w-1/5">
+                            <div class="w-full sm:w-2/5">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">מוצר שנצרך</label>
+                                <select id="entry-prod-select-ui" required class="w-full">
+                                    <option value="">בחר מוצר...</option>
+                                </select>
+                            </div>
+                            
+                            <div class="w-full sm:w-1/5">
                                 <label class="block text-sm font-medium text-slate-700 mb-1">כמות</label>
                                 <input type="number" id="entry-qty" step="0.01" value="1" min="0.01" required class="block w-full py-2.5 px-3 border border-slate-300 rounded-lg outline-none text-center focus:ring-2 focus:ring-primary-500">
                             </div>
@@ -200,9 +207,9 @@
 
     <script>
         let products = {};
+        let ts; // משתנה גלובלי ל-Tom Select
         document.getElementById('current-date').valueAsDate = new Date();
 
-        // --- פונקציית התראות קופצות ---
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -233,9 +240,13 @@
 
         function renderProducts() {
             const tbody = document.getElementById('price-list-table-body');
-            const datalist = document.getElementById('products-list'); // ה-Datalist החדש!
+            const select = document.getElementById('entry-prod-select-ui');
+            
             tbody.innerHTML = '';
-            datalist.innerHTML = '';
+            
+            // איפוס Tom Select
+            if (ts) ts.destroy();
+            select.innerHTML = '<option value="">בחר מוצר מהרשימה...</option>';
 
             Object.keys(products).sort().forEach(name => {
                 tbody.innerHTML += `
@@ -246,7 +257,17 @@
                             <button onclick="deleteProduct('${name}')" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-solid fa-trash-can"></i></button>
                         </td>
                     </tr>`;
-                datalist.innerHTML += `<option value="${name}">`;
+                
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+            });
+
+            // הפעלת העיצוב החדש לתיבת הבחירה
+            ts = new TomSelect("#entry-prod-select-ui", {
+                create: false,
+                sortField: { field: "text", direction: "asc" }
             });
         }
 
@@ -305,13 +326,12 @@
         document.getElementById('entry-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const date = document.getElementById('current-date').value;
-            const product_name = document.getElementById('entry-prod-input').value.trim(); // Datalist input
+            const product_name = document.getElementById('entry-prod-select-ui').value;
             const quantity = document.getElementById('entry-qty').value;
             const is_extra = document.getElementById('entry-is-extra').checked;
 
-            // בדיקת תקינות - האם המוצר באמת קיים במחירון
-            if (!products.hasOwnProperty(product_name)) {
-                showToast('אנא בחר מוצר מתוך הרשימה הקיימת', 'error');
+            if (!product_name) {
+                showToast('אנא בחר מוצר מתוך הרשימה', 'error');
                 return;
             }
 
@@ -322,8 +342,8 @@
             });
             
             document.getElementById('entry-qty').value = 1;
-            document.getElementById('entry-prod-input').value = '';
             document.getElementById('entry-is-extra').checked = false;
+            ts.clear(); // איפוס תיבת Tom Select
             
             showToast('החיוב התווסף בהצלחה!');
             loadEntriesForDate();
@@ -337,8 +357,6 @@
             }
         }
 
-        // --- פונקציות דאשבורד ויצוא אקסל ---
-        
         async function fetchMonthlyData() {
             const dateVal = document.getElementById('current-date').value; 
             if(!dateVal) return null;
@@ -409,7 +427,6 @@
                 csvContent += `${e.date},${typeStr},${e.product_name},${e.quantity},${price.toFixed(2)},${total.toFixed(2)}\n`;
             });
 
-            // שורות סיכום באקסל
             csvContent += `\n,,,סיכום חיובי שוטף:,${regularTotal.toFixed(2)}\n`;
             csvContent += `,,,סיכום חיובי אקסטרה:,${extraTotal.toFixed(2)}\n`;
             csvContent += `,,,סה"כ כללי לתשלום:,${(regularTotal + extraTotal).toFixed(2)}\n`;
@@ -424,7 +441,7 @@
             document.body.removeChild(link);
             
             showToast('הדוח ירד בהצלחה!');
-            closeDashboard(); // למקרה שהורדנו מתוך הדאשבורד
+            closeDashboard();
         }
 
         loadProducts();
