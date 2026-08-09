@@ -52,7 +52,7 @@
         .ts-wrapper { position: relative; }
         .ts-control { border-radius: 0.5rem !important; padding: 0.5rem 0.75rem !important; border-color: #cbd5e1 !important; font-size: 0.875rem !important; background-color: #fff !important; box-shadow: none !important; }
         .ts-control.focus { border-color: #6366f1 !important; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15) !important; }
-        .ts-dropdown { border-radius: 0.5rem !important; margin-top: 4px !important; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important; border: 1px solid #e2e8f0 !important; z-index: 99999 !important; font-family: 'Heebo', sans-serif !important; }
+        .ts-dropdown { border-radius: 0.5rem !important; margin-top: 4px !important; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1) !important; border: 1px solid #e2e8f0 !important; z-index: 99999 !important; font-family: 'Heebo', sans-serif !important; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
@@ -172,24 +172,25 @@
                             <div id="quick-add-chips" class="flex flex-wrap items-center gap-2 mb-4 empty:hidden"></div>
 
                             <form id="entry-form" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                                <div class="sm:col-span-5 flex flex-col">
+                                <div class="sm:col-span-4 flex flex-col">
                                     <label class="text-xs font-bold text-slate-500 mb-1">מוצר שנצרך</label>
                                     <select id="entry-prod-select-ui" required class="w-full"></select>
                                 </div>
-                                <div class="sm:col-span-3 flex flex-col">
+                                <div class="sm:col-span-2 flex flex-col">
                                     <div class="flex justify-between items-end mb-1">
-                                        <label class="text-xs font-bold text-slate-500">כמות <span class="font-normal">(תרגיל/מספר)</span></label>
+                                        <label class="text-xs font-bold text-slate-500">כמות</label>
                                         <span id="live-preview-box" class="text-[10px] text-primary-600 font-bold"></span>
                                     </div>
                                     <input type="text" inputmode="text" id="entry-qty" value="1" required class="w-full py-2 px-3 border border-slate-300 rounded-lg outline-none text-center focus:ring-2 focus:ring-primary-500 text-sm transition-all" oninput="updateLivePreview()">
                                 </div>
-                                <div class="sm:col-span-2 flex items-center justify-center h-[38px]">
-                                    <label class="flex items-center gap-2 cursor-pointer group">
-                                        <div class="relative flex items-center">
-                                            <input type="checkbox" id="entry-is-extra" class="peer appearance-none w-4 h-4 border-2 border-slate-300 rounded hover:border-amber-400 checked:bg-amber-500 checked:border-amber-500 transition-colors cursor-pointer">
-                                            <i class="fa-solid fa-check text-white absolute text-[10px] right-[2px] opacity-0 peer-checked:opacity-100 pointer-events-none"></i>
-                                        </div>
-                                        <span class="text-sm font-bold text-slate-600 group-hover:text-amber-600 transition-colors">אקסטרה</span>
+                                <div class="sm:col-span-3 flex flex-col">
+                                    <label class="text-xs font-bold text-slate-500 mb-1">הערה אישית (אופציונלי)</label>
+                                    <input type="text" id="entry-note" placeholder="לדוג' עבור אירוע..." class="w-full py-2 px-3 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white">
+                                </div>
+                                <div class="sm:col-span-1 flex items-center justify-center h-[38px]">
+                                    <label class="flex items-center gap-1.5 cursor-pointer group">
+                                        <input type="checkbox" id="entry-is-extra" class="w-4 h-4 text-amber-500 border-slate-300 rounded focus:ring-amber-400 cursor-pointer">
+                                        <span class="text-xs font-bold text-slate-600">אקסטרה</span>
                                     </label>
                                 </div>
                                 <div class="sm:col-span-2">
@@ -200,10 +201,12 @@
                             </form>
                         </div>
 
-                        <!-- סרגל חיפוש צמוד לטבלה -->
-                        <div class="px-5 py-2.5 bg-white border-b border-slate-100 flex justify-between items-center print:hidden">
-                            <h3 class="text-sm font-bold text-slate-700 hidden sm:block">פירוט חיובים</h3>
-                            <div class="relative w-full sm:w-64">
+                        <!-- סרגל קטגוריות סינון מהיר + חיפוש -->
+                        <div class="px-5 py-2.5 bg-white border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 print:hidden">
+                            <div id="category-filter-pills" class="flex flex-wrap items-center gap-1.5">
+                                <button type="button" onclick="filterByCategory('all')" class="category-pill bg-slate-900 text-white px-3 py-1 rounded-full text-xs font-bold transition-all">הכל</button>
+                            </div>
+                            <div class="relative w-full sm:w-56">
                                 <i class="fa-solid fa-magnifying-glass absolute right-3 top-2 text-slate-400 text-xs"></i>
                                 <input type="text" id="live-search" onkeyup="filterTable()" placeholder="חיפוש (הקש /)..." class="w-full pl-3 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-xs outline-none focus:ring-1 focus:ring-primary-400 transition-all">
                             </div>
@@ -214,7 +217,7 @@
                             <table class="min-w-full divide-y divide-slate-100">
                                 <thead class="bg-slate-50 sticky top-0 z-10 print:bg-white">
                                     <tr>
-                                        <th class="px-5 py-3 text-right text-xs font-bold text-slate-500 uppercase print:text-black">שם המוצר</th>
+                                        <th class="px-5 py-3 text-right text-xs font-bold text-slate-500 uppercase print:text-black">שם המוצר והערה</th>
                                         <th class="px-5 py-3 text-center text-xs font-bold text-slate-500 uppercase print:text-black w-20">כמות</th>
                                         <th class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase print:text-black w-28">מחיר</th>
                                         <th class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase print:text-black w-28">סה"כ</th>
@@ -367,7 +370,7 @@
 
     <!-- Script Logic -->
     <script>
-        let products = {}; let serverTemplates = {}; let ts; let dashboardChartInstance = null; let topProductsChartInstance = null; let categoryChartInstance = null; let currentGrandTotal = 0; let pendingDeletions = {}; let currentUserRole = 'viewer'; let budgetAlertShown = false;
+        let products = {}; let serverTemplates = {}; let ts; let dashboardChartInstance = null; let topProductsChartInstance = null; let categoryChartInstance = null; let currentGrandTotal = 0; let pendingDeletions = {}; let currentUserRole = 'viewer'; let currentCategoryFilter = 'all';
 
         const catColors = ['border-emerald-500', 'border-blue-500', 'border-purple-500', 'border-amber-500', 'border-rose-500', 'border-cyan-500'];
         function getCategoryColor(prodName) {
@@ -455,19 +458,37 @@
             });
 
             localStorage.setItem('saved_price_history', JSON.stringify(products));
+            
+            // עדכון כפתורי סינון קטגוריות מהיר
+            const pillsContainer = document.getElementById('category-filter-pills');
+            let pillsHtml = `<button type="button" onclick="filterByCategory('all')" class="category-pill ${currentCategoryFilter === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} px-3 py-1 rounded-full text-xs font-bold transition-all">הכל</button>`;
             Object.keys(categories).sort((a, b) => a.localeCompare(b, 'he')).forEach(cat => {
                 const optgroup = document.createElement('optgroup'); optgroup.label = cat;
                 categories[cat].sort((a, b) => a.localeCompare(b, 'he')).forEach(name => { const opt = document.createElement('option'); opt.value = name; opt.textContent = name; optgroup.appendChild(opt); });
                 select.appendChild(optgroup);
+                
+                pillsHtml += `<button type="button" onclick="filterByCategory('${escapeAttr(cat)}')" class="category-pill ${currentCategoryFilter === cat ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} px-3 py-1 rounded-full text-xs font-bold transition-all">${escapeHtml(cat)}</button>`;
             });
+            pillsContainer.innerHTML = pillsHtml;
 
-            // תיקון: הגדרת dropdownParent ל-body כדי שהתפריט ייפתח בצורה מושלמת מעל הכל
             ts = new TomSelect("#entry-prod-select-ui", { 
                 create: false, 
                 sortField: { field: "text", direction: "asc" }, 
                 dropdownParent: 'body',
                 onChange: function() { updateLivePreview(); } 
             });
+        }
+
+        function filterByCategory(cat) {
+            currentCategoryFilter = cat;
+            document.querySelectorAll('.category-pill').forEach(btn => {
+                if ((cat === 'all' && btn.textContent === 'הכל') || btn.textContent === cat) {
+                    btn.className = "category-pill bg-slate-900 text-white px-3 py-1 rounded-full text-xs font-bold transition-all";
+                } else {
+                    btn.className = "category-pill bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1 rounded-full text-xs font-bold transition-all";
+                }
+            });
+            filterTable();
         }
 
         function updateQuickAddChips() {
@@ -530,6 +551,10 @@
                 const itemTotal = price * entry.quantity; total += itemTotal;
                 
                 const extraTag = entry.is_extra ? `<i class="fa-solid fa-bolt text-amber-500 mr-2 text-xs" title="חיוב אקסטרה"></i>` : '';
+                const noteHtml = entry.note ? `<div class="text-xs text-slate-400 font-normal mt-0.5"><i class="fa-solid fa-note-sticky ml-1 text-slate-300"></i>${escapeHtml(entry.note)}</div>` : '';
+                
+                const cat = entry.product_name.includes('-') ? entry.product_name.split('-')[0].trim() : 'כללי';
+
                 const actionsHtml = currentUserRole !== 'viewer' ? `
                     <div class="flex items-center justify-center gap-1.5">
                         <button type="button" class="duplicate-entry-btn bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(entry.product_name)}" data-qty="${entry.quantity}" data-extra="${entry.is_extra}" title="שכפל שורה"><i class="fa-solid fa-copy text-[10px]"></i></button>
@@ -538,9 +563,10 @@
                     </div>` : '';
 
                 const delay = Math.min(index * 0.03, 0.3);
-                tbody.innerHTML += `<tr class="hover:bg-slate-50 table-row-item border-r-2 ${getCategoryColor(entry.product_name)} row-enter" style="animation-delay: ${delay}s"><td class="px-5 py-3 text-sm font-bold text-slate-700 text-right print:text-black product-name-cell">${extraTag}${escapeHtml(entry.product_name)}</td><td class="px-5 py-3 text-sm text-slate-800 text-center font-bold tabular-nums print:text-black">${entry.quantity}</td><td class="px-5 py-3 text-sm text-slate-500 text-left tabular-nums print:text-black dir-ltr">${formatMoney(price)} ₪</td><td class="px-5 py-3 text-sm font-bold text-primary-700 text-left tabular-nums print:text-black dir-ltr">${formatMoney(itemTotal)} ₪</td><td class="px-3 py-3 text-center print:hidden whitespace-nowrap">${actionsHtml}</td></tr>`;
+                tbody.innerHTML += `<tr class="hover:bg-slate-50 table-row-item border-r-2 ${getCategoryColor(entry.product_name)} row-enter" data-category="${escapeAttr(cat)}" style="animation-delay: ${delay}s"><td class="px-5 py-3 text-sm font-bold text-slate-700 text-right print:text-black product-name-cell">${extraTag}${escapeHtml(entry.product_name)}${noteHtml}</td><td class="px-5 py-3 text-sm text-slate-800 text-center font-bold tabular-nums print:text-black">${entry.quantity}</td><td class="px-5 py-3 text-sm text-slate-500 text-left tabular-nums print:text-black dir-ltr">${formatMoney(price)} ₪</td><td class="px-5 py-3 text-sm font-bold text-primary-700 text-left tabular-nums print:text-black dir-ltr">${formatMoney(itemTotal)} ₪</td><td class="px-3 py-3 text-center print:hidden whitespace-nowrap">${actionsHtml}</td></tr>`;
             });
             document.getElementById('daily-total').textContent = formatMoney(total);
+            filterTable(); // מפעיל סינון מיידי במידה וכבר נבחרה קטגוריה
         }
 
         document.getElementById('entries-table-body').addEventListener('click', (e) => {
@@ -638,7 +664,13 @@
 
         function filterTable() {
             const input = document.getElementById('live-search').value.toLowerCase(); const rows = document.querySelectorAll('.table-row-item');
-            rows.forEach(row => { const text = row.querySelector('.product-name-cell').textContent.toLowerCase(); if(text.includes(input)) row.style.display = ''; else row.style.display = 'none'; });
+            rows.forEach(row => {
+                const text = row.querySelector('.product-name-cell').textContent.toLowerCase();
+                const rowCat = row.dataset.category || '';
+                const matchesCategory = (currentCategoryFilter === 'all' || rowCat === currentCategoryFilter);
+                const matchesSearch = text.includes(input);
+                if(matchesCategory && matchesSearch) row.style.display = ''; else row.style.display = 'none';
+            });
         }
 
         async function copyFromYesterday() {
@@ -647,7 +679,7 @@
             const res = await apiFetch(`/api/entries/${yesterdayStr}`); if (!res) return; const entries = await res.json();
             if (entries.length === 0) return showToast('אין חיובים מאתמול להעתקה', 'warning'); if(!confirm(`להעתיק ${entries.length} חיובים מאתמול?`)) return;
             showToast('מעתיק...', 'success');
-            for (const entry of entries) { await apiFetch('/api/entries', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ date: currentStr, product_name: entry.product_name, quantity: entry.quantity, is_extra: entry.is_extra }) }); }
+            for (const entry of entries) { await apiFetch('/api/entries', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ date: currentStr, product_name: entry.product_name, quantity: entry.quantity, is_extra: entry.is_extra, note: entry.note }) }); }
             showToast('הועתק בהצלחה!'); loadEntriesForDate();
         }
 
@@ -660,16 +692,18 @@
 
         document.getElementById('entry-form').addEventListener('submit', async (e) => {
             e.preventDefault(); const btn = document.getElementById('entry-submit-btn'); const originalIcon = btn.innerHTML;
-            const date = document.getElementById('current-date').value; const product_name = document.getElementById('entry-prod-select-ui').value; const is_extra = document.getElementById('entry-is-extra').checked; const quantity = getEvaluatedQuantity();
+            const date = document.getElementById('current-date').value; const product_name = document.getElementById('entry-prod-select-ui').value; 
+            const is_extra = document.getElementById('entry-is-extra').checked; const quantity = getEvaluatedQuantity();
+            const note = document.getElementById('entry-note').value;
             if (!product_name) return showToast('בחר מוצר', 'error'); if (quantity <= 0) return showToast('כמות לא תקינה', 'error');
 
             btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
-            const res = await apiFetch('/api/entries', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ date, product_name, quantity, is_extra }) });
+            const res = await apiFetch('/api/entries', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ date, product_name, quantity, is_extra, note }) });
             btn.disabled = false; btn.innerHTML = originalIcon;
 
             if (res && res.ok) {
                 let freq = JSON.parse(localStorage.getItem('prod_freq') || '{}'); freq[product_name] = (freq[product_name] || 0) + 1; localStorage.setItem('prod_freq', JSON.stringify(freq)); updateQuickAddChips(); 
-                document.getElementById('entry-qty').value = 1; document.getElementById('entry-is-extra').checked = false; document.getElementById('live-preview-box').textContent = '';
+                document.getElementById('entry-qty').value = 1; document.getElementById('entry-is-extra').checked = false; document.getElementById('entry-note').value = ''; document.getElementById('live-preview-box').textContent = '';
                 if (ts) { ts.clear(); ts.focus(); } 
                 loadEntriesForDate();
             } else { const data = await res.json().catch(() => ({})); showToast(data.error || 'שגיאה', 'error'); }
@@ -731,10 +765,10 @@
         function closeDashboard() { const modal = document.getElementById('dashboard-modal'); const content = document.getElementById('dashboard-content'); modal.classList.add('opacity-0'); content.classList.add('scale-95'); setTimeout(() => modal.classList.add('hidden'), 300); }
 
         function exportToExcelFull(entriesData, filenamePrefix) {
-            const allData = [['תאריך', 'שם המוצר', 'סוג', 'כמות', 'מחיר יחידה', 'סה"כ']];
+            const allData = [['תאריך', 'שם המוצר', 'הערה', 'סוג', 'כמות', 'מחיר יחידה', 'סה"כ']];
             entriesData.sort((a,b) => a.date.localeCompare(b.date)).forEach(e => {
                 const price = (e.unit_price !== undefined && e.unit_price !== null) ? e.unit_price : (products[e.product_name] || 0);
-                allData.push([e.date, e.product_name, e.is_extra ? 'אקסטרה' : 'שוטף', e.quantity, price, price * e.quantity]);
+                allData.push([e.date, e.product_name, e.note || '', e.is_extra ? 'אקסטרה' : 'שוטף', e.quantity, price, price * e.quantity]);
             });
             const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(allData); ws['!views'] = [{ rightToLeft: true }];
             XLSX.utils.book_append_sheet(wb, ws, "חיובים"); XLSX.writeFile(wb, `${filenamePrefix}.xlsx`);
