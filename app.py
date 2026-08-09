@@ -31,8 +31,6 @@ class DailyEntry(db.Model):
     product_name = db.Column(db.String(100), nullable=False)
     quantity = db.Column(db.Float, nullable=False)
     is_extra = db.Column(db.Boolean, default=False)
-    # עמודה חדשה: מקפיאה את המחיר בזמן ההזנה כדי שדוחות היסטוריים לא ישתנו
-    # אם המחיר במחירון עודכן/נמחק מאוחר יותר. Nullable כדי לא לשבור רשומות ישנות.
     unit_price = db.Column(db.Float, nullable=True)
 
 # ---------------------------------------------------------
@@ -48,8 +46,8 @@ class ActivityLog(db.Model):
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)  # מכיל הַאש, לא סיסמה גלויה
-    role = db.Column(db.String(20), nullable=False, default='viewer')  # admin, editor, viewer
+    password = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default='viewer')
 
 def _column_exists(table_name, column_name):
     try:
@@ -57,7 +55,7 @@ def _column_exists(table_name, column_name):
         cols = [c['name'] for c in insp.get_columns(table_name)]
         return column_name in cols
     except Exception:
-        return True  # אם אי אפשר לבדוק, לא ננסה להוסיף כדי לא לשבור כלום
+        return True 
 
 def _run_migrations():
     """מיגרציות תוספתיות קטנות שלא פוגעות בנתונים קיימים."""
@@ -67,25 +65,23 @@ def _run_migrations():
             db.session.commit()
     except Exception as e:
         db.session.rollback()
-        print(f"DEBUG: מיגרציית unit_price נכשלה (כנראה כבר קיימת): {e}")
+        print(f"DEBUG: מיגרציית unit_price נכשלה: {e}")
 
     try:
-        # תיקון אורך עמודת הסיסמה: טבלאות ישנות נוצרו עם VARCHAR(100),
-        # אבל ה-hash של werkzeug (scrypt) ארוך יותר -> מרחיבים ל-255
-        db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password TYPE VARCHAR(255)'))
-        db.session.commit()
+        # תיקון: SQLite לא תומך ב-ALTER COLUMN TYPE, נבצע זאת רק אם המסד הוא PostgreSQL
+        if db.engine.name != 'sqlite':
+            db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password TYPE VARCHAR(255)'))
+            db.session.commit()
     except Exception as e:
         db.session.rollback()
-        print(f"DEBUG: מיגרציית הרחבת password נכשלה (כנראה כבר תוקנה): {e}")
+        print(f"DEBUG: מיגרציית הרחבת password נכשלה: {e}")
 
-# הזרקת הטבלאות החדשות באופן מפורש למסד הנתונים הקיים
 with app.app_context():
     User.__table__.create(db.engine, checkfirst=True)
     ActivityLog.__table__.create(db.engine, checkfirst=True)
     db.create_all()
     _run_migrations()
 
-    # יצירת מנהל מערכת ראשוני אם הטבלה נוצרה הרגע והיא ריקה
     if User.query.count() == 0:
         default_admin = User(username='admin', password=generate_password_hash('password123'), role='admin')
         db.session.add(default_admin)
@@ -145,7 +141,6 @@ def login():
             valid = check_password_hash(user.password, password)
         except Exception:
             valid = False
-        # תאימות לאחור: משתמשים ישנים שנשמרו לפני שהוספנו הַאשינג לסיסמאות
         if not valid and user.password == password:
             valid = True
             user.password = generate_password_hash(password)
@@ -206,8 +201,6 @@ def add_product():
 
 @app.route('/api/products/<path:name>', methods=['PUT'])
 def update_product(name):
-    """עדכון מוצר קיים: שינוי מחיר ו/או שינוי שם, כולל שרשור השם החדש
-    לכל הרשומות ההיסטוריות (DailyEntry) כדי לשמור על עקביות הדוחות."""
     if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות עדכון"}), 403
     data = request.json or {}
     try:
@@ -291,7 +284,7 @@ def add_entry():
         entry = DailyEntry.query.filter_by(date=date, product_name=product_name, is_extra=is_extra).first()
         if entry:
             entry.quantity += quantity
-            entry.unit_price = current_price  # רענון המחיר הקפוא לעדכני ביותר
+            entry.unit_price = current_price
             log_activity('UPDATE_ENTRY', f"עדכון כמות: {quantity} ל-{product_name} בתאריך {date}")
         else:
             entry = DailyEntry(date=date, product_name=product_name, quantity=quantity,
@@ -308,7 +301,6 @@ def add_entry():
 
 @app.route('/api/entries/<int:entry_id>', methods=['PUT'])
 def update_entry(entry_id):
-    """עריכת כמות/סוג חיוב קיים בלי למחוק ולהוסיף מחדש."""
     if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות עדכון"}), 403
     data = request.json or {}
     try:
@@ -347,6 +339,19 @@ def delete_entry(entry_id):
         db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
 
+# נתיב למחיקה גורפת (למניעת בעיית N+1 ב-Frontend)
+@app.route('/api/bulk/entries/<date>', methods=['DELETE'])
+def clear_date_entries(date):
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
+    try:
+        deleted_count = DailyEntry.query.filter_by(date=date).delete()
+        log_activity('CLEAR_DAY', f"ניקוי יום מלא מתאריך {date} ({deleted_count} חיובים הוסרו)")
+        db.session.commit()
+        return jsonify({"success": True})
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/report/month/<year_month>', methods=['GET'])
 def get_monthly_report(year_month):
     try:
@@ -375,7 +380,6 @@ def get_users():
     if not is_admin(): return jsonify({"error": "גישת מנהל נדרשת"}), 403
     try:
         users = User.query.all()
-        # לעולם לא מחזירים סיסמאות (גם לא מוצפנות) ללקוח
         return jsonify([{'id': u.id, 'username': u.username, 'role': u.role} for u in users])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -393,7 +397,7 @@ def create_or_update_user():
 
         user = User.query.filter_by(username=username).first()
         if user:
-            if password:  # סיסמה ריקה בעריכה = השארת הסיסמה הקיימת
+            if password:
                 user.password = generate_password_hash(password)
             user.role = role
             log_activity('UPDATE_USER', f"עדכון משתמש: {username} לתפקיד {role}")
