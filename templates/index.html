@@ -14,6 +14,7 @@
 
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: { sans: ['Heebo', 'sans-serif'] },
@@ -28,109 +29,116 @@
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        
         .toast-enter { animation: slideIn 0.3s ease-out forwards; }
         .toast-exit { animation: slideOut 0.3s ease-in forwards; }
         .row-enter { animation: fadeSlideIn 0.3s ease-out forwards; }
-        
         @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 0; } }
         @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-        
         .invoice-template { display: none; }
         @media print {
-            body:not(.invoice-mode) { background: white; }
+            body:not(.invoice-mode) { background: white !important; color: black !important; }
             body:not(.invoice-mode) .print\:hidden { display: none !important; }
             body:not(.invoice-mode) .print\:w-full { width: 100% !important; grid-column: span 12 / span 12 !important; }
-            body:not(.invoice-mode) .print\:shadow-none { box-shadow: none !important; border: none !important; }
             body.invoice-mode .app-ui { display: none !important; }
             body.invoice-mode .invoice-template { display: block !important; }
         }
-
         .ts-wrapper { position: relative; }
-        .ts-control { border-radius: 0.5rem !important; padding: 0.5rem 0.75rem !important; border-color: #cbd5e1 !important; font-size: 0.875rem !important; background-color: #fff !important; box-shadow: none !important; }
-        .ts-control.focus { border-color: #6366f1 !important; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15) !important; }
-        .ts-dropdown { border-radius: 0.5rem !important; margin-top: 4px !important; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1) !important; border: 1px solid #e2e8f0 !important; z-index: 99999 !important; font-family: 'Heebo', sans-serif !important; }
+        .ts-control { border-radius: 0.5rem !important; padding: 0.5rem 0.75rem !important; border-color: #cbd5e1 !important; font-size: 0.875rem !important; }
+        .dark .ts-control { background-color: #1e293b !important; color: #f8fafc !important; border-color: #334155 !important; }
+        .dark .ts-dropdown { background-color: #1e293b !important; color: #f8fafc !important; border-color: #334155 !important; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 antialiased min-h-screen flex flex-col transition-colors duration-200">
 
     <div class="app-ui flex flex-col min-h-screen w-full">
         <!-- Header -->
-        <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10 print:hidden">
+        <header class="bg-white dark:bg-slate-800 shadow-sm border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10 print:hidden transition-colors">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
                 <div class="flex items-center gap-3">
                     <div class="bg-primary-600 text-white p-2 rounded-lg shadow-sm">
                         <i class="fa-solid fa-chart-line text-lg"></i>
                     </div>
-                    <h1 class="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                        ניהול חיובי מכללה
-                        <span id="user-badge" class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-medium border border-slate-200">טוען...</span>
+                    <h1 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                        <span>ניהול חיובי מכללה</span>
+                        <span id="user-badge" class="text-xs bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 px-2 py-0.5 rounded-md font-medium border border-slate-200 dark:border-slate-600">טוען...</span>
                     </h1>
                 </div>
-                <div class="flex items-center gap-3">
-                    <button id="admin-panel-btn" onclick="openAdminPanel()" class="hidden text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-3 py-2 rounded-lg transition-colors">
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <!-- מתג מצב לילה -->
+                    <button onclick="toggleDarkMode()" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 p-2 rounded-lg transition-colors" title="מצב לילה / בהיר">
+                        <i id="dark-mode-icon" class="fa-solid fa-moon"></i>
+                    </button>
+                    <!-- כפתור עזרה קיצורי מקלדת -->
+                    <button onclick="openCheatSheet()" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 p-2 rounded-lg transition-colors hidden sm:block" title="קיצורי מקלדת (?)">
+                        <i class="fa-solid fa-keyboard"></i>
+                    </button>
+                    <button id="admin-panel-btn" onclick="openAdminPanel()" class="hidden text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-2 rounded-lg transition-colors" title="הגדרות מנהל">
                         <i class="fa-solid fa-gear"></i>
                     </button>
-                    <button onclick="openDashboard()" class="text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
-                        <i class="fa-solid fa-chart-pie"></i> אנליטיקה ודאשבורד
+                    <button onclick="openDashboard()" class="text-sm font-medium text-primary-600 dark:text-indigo-400 bg-primary-50 dark:bg-indigo-950/50 hover:bg-primary-100 px-3 sm:px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie"></i> <span class="hidden sm:inline">דאשבורד</span>
                     </button>
-                    <a href="/logout" class="text-sm font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-lg transition-colors">
+                    <a href="/logout" class="text-sm font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 px-2.5 py-2 rounded-lg transition-colors" title="יציאה">
                         <i class="fa-solid fa-right-from-bracket"></i>
                     </a>
                 </div>
             </div>
         </header>
 
-        <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full transition-all duration-300">
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <main class="flex-grow max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 w-full transition-all">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
                 <!-- מחירון -->
                 <div id="right-panel" class="lg:col-span-4 flex flex-col gap-6 print:hidden">
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[calc(100vh-140px)] sticky top-24">
-                        <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                            <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col h-[500px] lg:h-[calc(100vh-130px)] sticky top-20 transition-colors">
+                        <div class="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-between items-center">
+                            <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                                 <i class="fa-solid fa-tags text-primary-500"></i> מחירון
                             </h2>
-                            <button id="bulk-update-btn" onclick="bulkUpdatePrices()" class="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                            <button id="bulk-update-btn" onclick="bulkUpdatePrices()" class="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
                                 <i class="fa-solid fa-arrow-trend-up"></i> עדכון גורף
                             </button>
                         </div>
 
                         <div class="flex-grow flex flex-col overflow-hidden">
-                            <form id="product-form" class="p-5 space-y-4">
+                            <form id="product-form" class="p-4 space-y-3">
                                 <div class="flex items-center justify-between">
                                     <p id="product-form-title" class="text-xs font-bold text-slate-400 uppercase tracking-wider">הוספת מוצר חדש</p>
-                                    <button type="button" id="product-cancel-edit-btn" onclick="cancelProductEdit()" class="hidden text-xs font-bold text-rose-500 hover:text-rose-600">ביטול עריכה</button>
+                                    <button type="button" id="product-cancel-edit-btn" onclick="cancelProductEdit()" class="hidden text-xs font-bold text-rose-500">ביטול עריכה</button>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">שם המוצר</label>
-                                    <input type="text" id="prod-name" required class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm">
+                                    <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">שם המוצר</label>
+                                    <input type="text" id="prod-name" required class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white dark:bg-slate-900 dark:text-white">
                                 </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">מחיר יחידה (₪)</label>
-                                    <input type="number" id="prod-price" step="0.01" required class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">מחיר (₪)</label>
+                                        <input type="number" id="prod-price" step="0.01" required class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white dark:bg-slate-900 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">תגית אישית</label>
+                                        <input type="text" id="prod-tag" placeholder="לדוג' דחוף" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white dark:bg-slate-900 dark:text-white">
+                                    </div>
                                 </div>
                                 <input type="hidden" id="prod-edit-original-name" value="">
-                                <button type="submit" id="product-submit-btn" class="w-full py-2 px-4 rounded-lg text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 transition-colors flex justify-center items-center gap-2">
+                                <button type="submit" id="product-submit-btn" class="w-full py-2 px-4 rounded-lg text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 transition-colors flex justify-center items-center gap-2 shadow-sm">
                                     <i class="fa-solid fa-plus"></i> <span id="product-submit-btn-text">שמור למחירון</span>
                                 </button>
                             </form>
 
-                            <hr class="border-slate-100 mx-5">
+                            <hr class="border-slate-100 dark:border-slate-700 mx-4">
 
                             <div class="flex-grow overflow-y-auto mt-2">
-                                <table class="min-w-full divide-y divide-slate-100">
-                                    <thead class="bg-slate-50 sticky top-0 z-10">
+                                <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-700">
+                                    <thead class="bg-slate-50 dark:bg-slate-900/50 sticky top-0 z-10">
                                         <tr>
-                                            <th class="px-5 py-2.5 text-right text-xs font-bold text-slate-500 uppercase">מוצר</th>
-                                            <th class="px-5 py-2.5 text-left text-xs font-bold text-slate-500 uppercase">מחיר</th>
-                                            <th class="px-5 py-2.5 text-center text-xs font-bold text-slate-500 uppercase w-20">פעולות</th>
+                                            <th class="px-4 py-2.5 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">מוצר ותגית</th>
+                                            <th class="px-3 py-2.5 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">מחיר</th>
+                                            <th class="px-2 py-2.5 text-center text-xs font-bold text-slate-500 dark:text-slate-400 uppercase w-20">פעולות</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="price-list-table-body" class="bg-white divide-y divide-slate-50"></tbody>
+                                    <tbody id="price-list-table-body" class="bg-white dark:bg-slate-800 divide-y divide-slate-50 dark:divide-slate-700/50"></tbody>
                                 </table>
                             </div>
                         </div>
@@ -138,26 +146,26 @@
                 </div>
 
                 <!-- חיובים -->
-                <div id="left-panel" class="lg:col-span-8 flex flex-col gap-5 transition-all duration-300 print:w-full">
+                <div id="left-panel" class="lg:col-span-8 flex flex-col gap-4 transition-all duration-300 print:w-full">
                     
                     <!-- סרגל עליון -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 print:hidden border-t-4 border-t-primary-500">
-                        <div class="flex items-center gap-3">
-                            <h2 class="text-xl font-bold text-slate-800">דו"ח חיובים יומי</h2>
-                            <button onclick="toggleFocusMode()" class="text-slate-400 hover:text-primary-600 transition-colors p-1" title="מסך רחב">
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden border-t-4 border-t-primary-500 transition-colors">
+                        <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                            <h2 class="text-lg sm:text-xl font-bold text-slate-800 dark:text-white">דו"ח חיובים יומי</h2>
+                            <button onclick="toggleFocusMode()" class="text-slate-400 hover:text-primary-600 transition-colors p-1 hidden sm:block" title="מסך רחב">
                                 <i class="fa-solid fa-expand"></i>
                             </button>
                         </div>
                         
-                        <div class="flex items-center gap-2 flex-row-reverse sm:flex-row">
-                            <input type="date" id="current-date" onchange="loadEntriesForDate()" class="w-full sm:w-40 px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer shadow-sm">
-                            <button onclick="openTemplatesModal()" class="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-colors">
+                        <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end w-full sm:w-auto">
+                            <input type="date" id="current-date" onchange="loadEntriesForDate()" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer shadow-sm bg-white dark:bg-slate-900">
+                            <button onclick="openTemplatesModal()" class="text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1 transition-colors">
                                 <i class="fa-solid fa-layer-group"></i> תבניות
                             </button>
-                            <button onclick="copyFromYesterday()" class="text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-colors" title="העתק מאתמול">
+                            <button onclick="copyFromYesterday()" class="text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1 transition-colors" title="העתק מאתמול">
                                 <i class="fa-solid fa-copy"></i>
                             </button>
-                            <button id="clear-day-btn" onclick="clearCurrentDay()" class="text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-colors" title="נקה יום">
+                            <button id="clear-day-btn" onclick="clearCurrentDay()" class="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1 transition-colors" title="נקה יום">
                                 <i class="fa-solid fa-trash-can"></i>
                             </button>
                         </div>
@@ -165,36 +173,36 @@
                     <p class="hidden print:block text-slate-800 font-bold text-lg mb-4" id="print-date-display"></p>
 
                     <!-- אזור טבלה והזנה -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex-grow flex flex-col print:shadow-none print:border-0">
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex-grow flex flex-col print:shadow-none print:border-0 transition-colors">
                         
                         <!-- טופס הזנה -->
-                        <div id="entry-form-container" class="p-5 border-b border-slate-200 bg-slate-50/50 print:hidden relative">
-                            <div id="quick-add-chips" class="flex flex-wrap items-center gap-2 mb-4 empty:hidden"></div>
+                        <div id="entry-form-container" class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 print:hidden relative">
+                            <div id="quick-add-chips" class="flex flex-wrap items-center gap-1.5 mb-3 empty:hidden"></div>
 
                             <form id="entry-form" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                                 <div class="sm:col-span-4 flex flex-col">
-                                    <label class="text-xs font-bold text-slate-500 mb-1">מוצר שנצרך</label>
+                                    <label class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">מוצר שנצרך</label>
                                     <select id="entry-prod-select-ui" required class="w-full"></select>
                                 </div>
                                 <div class="sm:col-span-2 flex flex-col">
                                     <div class="flex justify-between items-end mb-1">
-                                        <label class="text-xs font-bold text-slate-500">כמות</label>
-                                        <span id="live-preview-box" class="text-[10px] text-primary-600 font-bold"></span>
+                                        <label class="text-xs font-bold text-slate-500 dark:text-slate-400">כמות</label>
+                                        <span id="live-preview-box" class="text-[10px] text-primary-600 dark:text-indigo-400 font-bold"></span>
                                     </div>
-                                    <input type="text" inputmode="text" id="entry-qty" value="1" required class="w-full py-2 px-3 border border-slate-300 rounded-lg outline-none text-center focus:ring-2 focus:ring-primary-500 text-sm transition-all" oninput="updateLivePreview()">
+                                    <input type="text" inputmode="text" id="entry-qty" value="1" required class="w-full py-2 px-3 border border-slate-300 dark:border-slate-600 rounded-lg outline-none text-center focus:ring-2 focus:ring-primary-500 text-sm transition-all bg-white dark:bg-slate-900 dark:text-white" oninput="updateLivePreview()">
                                 </div>
                                 <div class="sm:col-span-3 flex flex-col">
-                                    <label class="text-xs font-bold text-slate-500 mb-1">הערה אישית (אופציונלי)</label>
-                                    <input type="text" id="entry-note" placeholder="לדוג' עבור אירוע..." class="w-full py-2 px-3 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white">
+                                    <label class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">הערה אישית</label>
+                                    <input type="text" id="entry-note" placeholder="לדוג' אירוע..." class="w-full py-2 px-3 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white dark:bg-slate-900 dark:text-white">
                                 </div>
                                 <div class="sm:col-span-1 flex items-center justify-center h-[38px]">
                                     <label class="flex items-center gap-1.5 cursor-pointer group">
                                         <input type="checkbox" id="entry-is-extra" class="w-4 h-4 text-amber-500 border-slate-300 rounded focus:ring-amber-400 cursor-pointer">
-                                        <span class="text-xs font-bold text-slate-600">אקסטרה</span>
+                                        <span class="text-xs font-bold text-slate-600 dark:text-slate-300">אקסטרה</span>
                                     </label>
                                 </div>
                                 <div class="sm:col-span-2">
-                                    <button type="submit" id="entry-submit-btn" class="w-full flex justify-center items-center gap-2 py-2 rounded-lg text-sm font-bold text-white bg-slate-800 hover:bg-slate-900 transition-colors h-[38px]">
+                                    <button type="submit" id="entry-submit-btn" class="w-full flex justify-center items-center gap-2 py-2 rounded-lg text-sm font-bold text-white bg-slate-800 hover:bg-slate-900 dark:bg-primary-600 dark:hover:bg-primary-700 transition-colors h-[38px] shadow-sm">
                                         הוסף חיוב
                                     </button>
                                 </div>
@@ -202,46 +210,46 @@
                         </div>
 
                         <!-- סרגל קטגוריות סינון מהיר + חיפוש -->
-                        <div class="px-5 py-2.5 bg-white border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 print:hidden">
-                            <div id="category-filter-pills" class="flex flex-wrap items-center gap-1.5">
-                                <button type="button" onclick="filterByCategory('all')" class="category-pill bg-slate-900 text-white px-3 py-1 rounded-full text-xs font-bold transition-all">הכל</button>
+                        <div class="px-4 sm:px-5 py-2.5 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-3 print:hidden">
+                            <div id="category-filter-pills" class="flex flex-wrap items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                                <button type="button" onclick="filterByCategory('all')" class="category-pill bg-slate-900 dark:bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold transition-all whitespace-nowrap">הכל</button>
                             </div>
                             <div class="relative w-full sm:w-56">
                                 <i class="fa-solid fa-magnifying-glass absolute right-3 top-2 text-slate-400 text-xs"></i>
-                                <input type="text" id="live-search" onkeyup="filterTable()" placeholder="חיפוש (הקש /)..." class="w-full pl-3 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-xs outline-none focus:ring-1 focus:ring-primary-400 transition-all">
+                                <input type="text" id="live-search" onkeyup="filterTable()" placeholder="חיפוש מהיר (/)..." class="w-full pl-3 pr-8 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md text-xs outline-none focus:ring-1 focus:ring-primary-400 transition-all dark:text-white">
                             </div>
                         </div>
 
                         <!-- טבלה -->
                         <div class="flex-grow overflow-x-auto min-h-[250px]">
-                            <table class="min-w-full divide-y divide-slate-100">
-                                <thead class="bg-slate-50 sticky top-0 z-10 print:bg-white">
+                            <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-700">
+                                <thead class="bg-slate-50 dark:bg-slate-900/50 sticky top-0 z-10 print:bg-white">
                                     <tr>
-                                        <th class="px-5 py-3 text-right text-xs font-bold text-slate-500 uppercase print:text-black">שם המוצר והערה</th>
-                                        <th class="px-5 py-3 text-center text-xs font-bold text-slate-500 uppercase print:text-black w-20">כמות</th>
-                                        <th class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase print:text-black w-28">מחיר</th>
-                                        <th class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase print:text-black w-28">סה"כ</th>
-                                        <th class="px-3 py-3 text-center text-xs font-bold text-slate-500 uppercase print:hidden w-32">פעולות</th>
+                                        <th class="px-4 sm:px-5 py-3 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase print:text-black">שם המוצר והערה</th>
+                                        <th class="px-3 py-3 text-center text-xs font-bold text-slate-500 dark:text-slate-400 uppercase print:text-black w-16">כמות</th>
+                                        <th class="px-3 py-3 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase print:text-black w-24">מחיר</th>
+                                        <th class="px-3 py-3 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase print:text-black w-24">סה"כ</th>
+                                        <th class="px-2 py-3 text-center text-xs font-bold text-slate-500 dark:text-slate-400 uppercase print:hidden w-28">פעולות</th>
                                     </tr>
                                 </thead>
-                                <tbody id="entries-table-body" class="bg-white divide-y divide-slate-50 print:border-b"></tbody>
+                                <tbody id="entries-table-body" class="bg-white dark:bg-slate-800 divide-y divide-slate-50 dark:divide-slate-700/50 print:border-b"></tbody>
                             </table>
                         </div>
 
                         <!-- פוטר סיכומים -->
-                        <div class="bg-slate-800 text-white p-5 flex flex-col sm:flex-row items-center justify-between mt-auto print:bg-white print:text-black print:border-t-2 print:p-2 gap-4 rounded-b-2xl print:rounded-none">
-                            <div class="flex items-center">
+                        <div class="bg-slate-800 dark:bg-slate-900 text-white p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between mt-auto print:bg-white print:text-black print:border-t-2 print:p-2 gap-4 rounded-b-2xl print:rounded-none shadow-inner">
+                            <div class="flex items-center w-full sm:w-auto justify-between sm:justify-start">
                                 <div>
                                     <p class="text-slate-400 text-xs font-medium mb-0.5 print:text-slate-600">סה"כ חיובים ליום זה:</p>
-                                    <p class="text-3xl font-extrabold text-white tabular-nums tracking-tight print:text-black"><span id="daily-total">0.00</span> ₪</p>
+                                    <p class="text-2xl sm:text-3xl font-extrabold text-white tabular-nums tracking-tight print:text-black"><span id="daily-total">0.00</span> ₪</p>
                                 </div>
                             </div>
-                            <div class="flex gap-3 print:hidden w-full sm:w-auto">
-                                <button onclick="shareWhatsApp()" class="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors text-sm">
-                                    <i class="fa-brands fa-whatsapp text-lg"></i> שתף דו"ח
+                            <div class="flex gap-2 sm:gap-3 print:hidden w-full sm:w-auto">
+                                <button onclick="shareWhatsApp()" class="flex-1 sm:flex-none bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-colors text-xs sm:text-sm">
+                                    <i class="fa-brands fa-whatsapp text-base"></i> שתף דו"ח
                                 </button>
-                                <button onclick="window.print()" class="flex-1 sm:flex-none bg-white/10 hover:bg-white/20 text-white px-4 py-2.5 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors text-sm">
-                                    <i class="fa-solid fa-print"></i>
+                                <button onclick="window.print()" class="flex-1 sm:flex-none bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-colors text-xs sm:text-sm">
+                                    <i class="fa-solid fa-print"></i> הדפסה
                                 </button>
                             </div>
                         </div>
@@ -249,6 +257,32 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- מודל קיצורי מקלדת (Cheat Sheet) -->
+    <div id="cheat-sheet-modal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300 border border-slate-200 dark:border-slate-700 p-6">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-100 dark:border-slate-700 pb-3">
+                <h3 class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-keyboard text-primary-500"></i> קיצורי מקלדת מהירים
+                </h3>
+                <button onclick="closeCheatSheet()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <ul class="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                <li class="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                    <span>הוספת חיוב חדש מהירה</span>
+                    <kbd class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 px-2 py-1 rounded text-xs font-mono shadow-sm">Ctrl + Enter</kbd>
+                </li>
+                <li class="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                    <span>מעבר מהיר לשורת החיפוש</span>
+                    <kbd class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 px-2 py-1 rounded text-xs font-mono shadow-sm">/</kbd>
+                </li>
+                <li class="flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-slate-100 dark:border-slate-700/50">
+                    <span>הצגת חלונית עזרה זו</span>
+                    <kbd class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 px-2 py-1 rounded text-xs font-mono shadow-sm">?</kbd>
+                </li>
+            </ul>
+        </div>
     </div>
 
     <!-- מודלים ומערכת -->
@@ -276,101 +310,123 @@
 
     <!-- Modals (Admin, Templates, Dashboard) -->
     <div id="admin-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="admin-content">
+        <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="admin-content">
             <div class="bg-slate-800 p-4 flex justify-between items-center text-white shrink-0">
                 <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-gear text-slate-300"></i> הגדרות מנהל ובקרה</h3>
                 <button onclick="closeAdminPanel()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
-            <div class="bg-slate-100 border-b flex px-4 gap-2 shrink-0">
+            <div class="bg-slate-100 dark:bg-slate-900 border-b dark:border-slate-700 flex px-4 gap-2 shrink-0">
                 <button id="tab-logs-btn" onclick="switchAdminTab('logs')" class="px-4 py-3 border-b-2 border-primary-600 font-bold text-sm text-primary-600">יומן פעולות</button>
-                <button id="tab-users-btn" onclick="switchAdminTab('users')" class="px-4 py-3 border-b-2 border-transparent font-bold text-sm text-slate-600 hover:text-slate-900">משתמשי צוות</button>
+                <button id="tab-users-btn" onclick="switchAdminTab('users')" class="px-4 py-3 border-b-2 border-transparent font-bold text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900">משתמשי צוות</button>
             </div>
-            <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
+            <div class="p-6 overflow-y-auto flex-grow bg-slate-50 dark:bg-slate-800/50">
                 <div id="admin-tab-logs" class="space-y-6">
-                    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex justify-between items-center">
-                        <div><h4 class="font-bold text-slate-800">גיבוי נתוני ליבה</h4><p class="text-xs text-slate-500">שמור עותק מקומי של ההגדרות.</p></div>
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm flex justify-between items-center">
+                        <div><h4 class="font-bold text-slate-800 dark:text-white">גיבוי נתוני ליבה</h4><p class="text-xs text-slate-500">שמור עותק מקומי של ההגדרות.</p></div>
                         <button onclick="downloadSystemBackup()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-download"></i> הורדת גיבוי</button>
                     </div>
-                    <div class="bg-white border border-slate-200 rounded-xl shadow-sm h-80 overflow-auto">
-                        <table class="min-w-full divide-y divide-slate-100 text-sm"><tbody id="logs-table-body"></tbody></table>
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm h-80 overflow-auto">
+                        <table class="min-w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm"><tbody id="logs-table-body"></tbody></table>
                     </div>
                 </div>
                 <div id="admin-tab-users" class="hidden space-y-6">
-                    <form id="user-form" class="bg-white p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end shadow-sm">
-                        <div><label class="block text-xs font-bold text-slate-600 mb-1">שם משתמש</label><input type="text" id="user-username" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500"></div>
-                        <div><label class="block text-xs font-bold text-slate-600 mb-1">סיסמה</label><input type="text" id="user-password" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500"></div>
-                        <div><label class="block text-xs font-bold text-slate-500 mb-1">הרשאה</label><select id="user-role" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500"><option value="viewer">צפייה</option><option value="editor">עורך</option><option value="admin">מנהל</option></select></div>
-                        <div class="flex gap-2"><button type="submit" class="flex-grow bg-primary-600 text-white font-bold py-2 rounded-lg text-sm">שמור</button><button type="button" id="user-form-cancel-btn" onclick="cancelEditUser()" class="hidden bg-slate-100 font-bold py-2 px-3 rounded-lg text-sm">ביטול</button></div>
+                    <form id="user-form" class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end shadow-sm">
+                        <div><label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">שם משתמש</label><input type="text" id="user-username" required class="w-full px-3 py-2 border dark:border-slate-600 rounded-lg text-sm outline-none bg-white dark:bg-slate-900 dark:text-white"></div>
+                        <div><label class="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">סיסמה</label><input type="text" id="user-password" required class="w-full px-3 py-2 border dark:border-slate-600 rounded-lg text-sm outline-none bg-white dark:bg-slate-900 dark:text-white"></div>
+                        <div><label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">הרשאה</label><select id="user-role" class="w-full px-3 py-2 border dark:border-slate-600 rounded-lg text-sm outline-none bg-white dark:bg-slate-900 dark:text-white"><option value="viewer">צפייה</option><option value="editor">עורך</option><option value="admin">מנהל</option></select></div>
+                        <div class="flex gap-2"><button type="submit" class="flex-grow bg-primary-600 text-white font-bold py-2 rounded-lg text-sm">שמור</button><button type="button" id="user-form-cancel-btn" onclick="cancelEditUser()" class="hidden bg-slate-100 dark:bg-slate-700 dark:text-white font-bold py-2 px-3 rounded-lg text-sm">ביטול</button></div>
                     </form>
-                    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden"><table class="min-w-full divide-y divide-slate-200 text-sm"><tbody id="users-table-body"></tbody></table></div>
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden"><table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-sm"><tbody id="users-table-body"></tbody></table></div>
                 </div>
             </div>
         </div>
     </div>
 
     <div id="templates-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300" id="templates-content">
+        <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300" id="templates-content">
             <div class="bg-indigo-600 p-4 flex justify-between items-center text-white"><h3 class="text-base font-bold flex items-center gap-2"><i class="fa-solid fa-layer-group"></i> ניהול תבניות עבודה</h3><button onclick="closeTemplatesModal()" class="text-indigo-200 hover:text-white"><i class="fa-solid fa-xmark"></i></button></div>
-            <div class="p-5 bg-slate-50">
-                <button onclick="saveCurrentDayAsTemplate()" class="w-full bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 py-2.5 rounded-lg text-sm font-bold mb-4 flex justify-center items-center gap-2 shadow-sm"><i class="fa-solid fa-cloud-arrow-up"></i> שמור יום נוכחי כתבנית בשרת</button>
+            <div class="p-5 bg-slate-50 dark:bg-slate-900/50">
+                <button onclick="saveCurrentDayAsTemplate()" class="w-full bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-slate-700 hover:bg-indigo-50 py-2.5 rounded-lg text-sm font-bold mb-4 flex justify-center items-center gap-2 shadow-sm"><i class="fa-solid fa-cloud-arrow-up"></i> שמור יום נוכחי כתבנית בשרת</button>
                 <div id="templates-list" class="space-y-2 max-h-60 overflow-y-auto"></div>
             </div>
         </div>
     </div>
 
     <div id="dashboard-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[95vh]" id="dashboard-content">
+        <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[95vh]" id="dashboard-content">
             <div class="bg-slate-800 p-4 flex justify-between items-center text-white shrink-0">
                 <h3 class="text-lg font-bold flex items-center gap-2">
                     <i class="fa-solid fa-chart-pie text-primary-400"></i> אנליטיקה ודאשבורד
-                    <input type="month" id="dashboard-month-picker" onchange="openDashboard(true)" class="ml-3 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-sm outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer">
+                    <input type="month" id="dashboard-month-picker" onchange="openDashboard(true)" class="ml-3 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-sm outline-none cursor-pointer">
                 </h3>
                 <button onclick="closeDashboard()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
-            <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
-                <div class="bg-white border border-slate-200 rounded-xl p-4 mb-5 shadow-sm">
+            <div class="p-6 overflow-y-auto flex-grow bg-slate-50 dark:bg-slate-900/50">
+                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 mb-5 shadow-sm">
                     <div class="flex justify-between items-end mb-2">
-                        <div><label class="block text-xs font-bold text-slate-500 mb-1">תקציב יעד לתקופה (₪):</label><input type="number" id="budget-input" oninput="updateBudgetProgress()" class="px-2 py-1 text-sm border rounded bg-slate-50 w-32 outline-none focus:ring-1 focus:ring-primary-500"></div>
-                        <div class="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded" id="budget-percentage-text">0% נוצלו</div>
+                        <div><label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">תקציב יעד לתקופה (₪):</label><input type="number" id="budget-input" oninput="updateBudgetProgress()" class="px-2 py-1 text-sm border dark:border-slate-600 rounded bg-slate-50 dark:bg-slate-900 w-32 outline-none dark:text-white"></div>
+                        <div class="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded" id="budget-percentage-text">0% נוצלו</div>
                     </div>
-                    <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden"><div id="budget-progress-bar" class="bg-primary-500 h-full w-0 transition-all duration-500"></div></div>
+                    <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden"><div id="budget-progress-bar" class="bg-primary-500 h-full w-0 transition-all duration-500"></div></div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                    <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
                         <div class="grid grid-cols-2 gap-3 mb-4">
-                            <div class="bg-primary-50 rounded-lg p-3 border border-primary-100"><p class="text-[10px] font-bold text-primary-600 mb-1">שוטף</p><p class="text-lg font-bold text-primary-800 tabular-nums"><span id="dash-regular-total">0</span></p></div>
-                            <div class="bg-orange-50 rounded-lg p-3 border border-orange-100"><p class="text-[10px] font-bold text-orange-600 mb-1">אקסטרה</p><p class="text-lg font-bold text-orange-800 tabular-nums"><span id="dash-extra-total">0</span></p></div>
+                            <div class="bg-primary-50 dark:bg-indigo-950/40 rounded-lg p-3 border border-primary-100 dark:border-indigo-900/50"><p class="text-[10px] font-bold text-primary-600 dark:text-indigo-400 mb-1">שוטף</p><p class="text-lg font-bold text-primary-800 dark:text-indigo-200 tabular-nums"><span id="dash-regular-total">0</span></p></div>
+                            <div class="bg-orange-50 dark:bg-amber-950/40 rounded-lg p-3 border border-orange-100 dark:border-amber-900/50"><p class="text-[10px] font-bold text-orange-600 dark:text-amber-400 mb-1">אקסטרה</p><p class="text-lg font-bold text-orange-800 dark:text-amber-200 tabular-nums"><span id="dash-extra-total">0</span></p></div>
                         </div>
                         <div class="flex-grow relative min-h-[140px]"><canvas id="dashboardChart"></canvas></div>
                     </div>
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col">
-                        <h4 class="text-xs font-bold text-slate-500 mb-2 text-center">פילוח קטגוריות</h4>
+                    <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+                        <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 text-center">פילוח קטגוריות</h4>
                         <div class="flex-grow relative min-h-[160px]"><canvas id="categoryChart"></canvas></div>
                     </div>
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col">
-                        <div class="bg-slate-800 text-white rounded-lg p-4 mb-3 text-center"><p class="text-[10px] text-slate-400 mb-1">תחזית תקציב לסוף החודש</p><p class="text-2xl font-bold tabular-nums"><span id="dash-forecast">0</span> ₪</p></div>
-                        <h4 class="text-xs font-bold text-slate-500 mb-2">5 היקרים ביותר</h4>
+                    <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+                        <div class="bg-slate-800 dark:bg-slate-900 text-white rounded-lg p-4 mb-3 text-center"><p class="text-[10px] text-slate-400 mb-1">תחזית תקציב לסוף החודש</p><p class="text-2xl font-bold tabular-nums"><span id="dash-forecast">0</span> ₪</p></div>
+                        <h4 class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">5 היקרים ביותר</h4>
                         <div class="flex-grow relative min-h-[100px]"><canvas id="topProductsChart"></canvas></div>
                     </div>
                 </div>
-                <div class="bg-white border border-slate-200 rounded-xl p-5 text-center shadow-sm">
-                    <p class="text-xs font-bold text-slate-500 mb-1">סה"כ לתשלום בפועל</p>
-                    <div class="flex items-center justify-center gap-3"><p class="text-4xl font-extrabold text-slate-800 tabular-nums"><span id="dash-grand-total">0</span> ₪</p><div id="dash-trend-indicator"></div></div>
+                <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 text-center shadow-sm">
+                    <p class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">סה"כ לתשלום בפועל</p>
+                    <div class="flex items-center justify-center gap-3"><p class="text-4xl font-extrabold text-slate-800 dark:text-white tabular-nums"><span id="dash-grand-total">0</span> ₪</p><div id="dash-trend-indicator"></div></div>
                 </div>
             </div>
-            <div class="p-4 border-t border-slate-200 bg-white flex flex-col gap-2 shrink-0">
+            <div class="p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col gap-2 shrink-0">
                 <div class="flex gap-3">
                     <button onclick="exportMonthlyReport()" class="flex-1 bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 rounded-lg text-sm font-bold flex justify-center items-center gap-2"><i class="fa-solid fa-file-excel"></i> דוח Excel</button>
-                    <button onclick="generateFormalInvoice()" class="flex-1 bg-slate-800 text-white hover:bg-slate-900 py-2.5 rounded-lg text-sm font-bold flex justify-center items-center gap-2"><i class="fa-solid fa-file-pdf"></i> דרישת תשלום</button>
+                    <button onclick="generateFormalInvoice()" class="flex-1 bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-900 py-2.5 rounded-lg text-sm font-bold flex justify-center items-center gap-2"><i class="fa-solid fa-file-pdf"></i> דרישת תשלום</button>
                 </div>
-                <button id="end-season-btn" onclick="endOfSeasonReset()" class="w-full text-rose-500 hover:bg-rose-50 py-2 rounded-lg text-xs font-bold transition-colors"><i class="fa-solid fa-power-off mr-1"></i> איפוס מערכת וסגירת עונה</button>
+                <button id="end-season-btn" onclick="endOfSeasonReset()" class="w-full text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 py-2 rounded-lg text-xs font-bold transition-colors"><i class="fa-solid fa-power-off mr-1"></i> איפוס מערכת וסגירת עונה</button>
             </div>
         </div>
     </div>
 
     <!-- Script Logic -->
     <script>
-        let products = {}; let serverTemplates = {}; let ts; let dashboardChartInstance = null; let topProductsChartInstance = null; let categoryChartInstance = null; let currentGrandTotal = 0; let pendingDeletions = {}; let currentUserRole = 'viewer'; let currentCategoryFilter = 'all';
+        let products = {}; let productTags = {}; let serverTemplates = {}; let ts; let dashboardChartInstance = null; let topProductsChartInstance = null; let categoryChartInstance = null; let currentGrandTotal = 0; let pendingDeletions = {}; let currentUserRole = 'viewer'; let currentCategoryFilter = 'all';
+
+        // Dark Mode Initialization
+        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+            document.getElementById('dark-mode-icon').className = 'fa-solid fa-sun';
+        }
+
+        function toggleDarkMode() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+                document.getElementById('dark-mode-icon').className = 'fa-solid fa-moon';
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+                document.getElementById('dark-mode-icon').className = 'fa-solid fa-sun';
+            }
+        }
+
+        // Keyboard Cheat Sheet Modal Logic
+        function openCheatSheet() { document.getElementById('cheat-sheet-modal').classList.remove('hidden'); setTimeout(() => document.getElementById('cheat-sheet-modal').classList.remove('opacity-0'), 10); }
+        function closeCheatSheet() { document.getElementById('cheat-sheet-modal').classList.add('opacity-0'); setTimeout(() => document.getElementById('cheat-sheet-modal').classList.add('hidden'), 300); }
 
         const catColors = ['border-emerald-500', 'border-blue-500', 'border-purple-500', 'border-amber-500', 'border-rose-500', 'border-cyan-500'];
         function getCategoryColor(prodName) {
@@ -385,12 +441,13 @@
         document.addEventListener('keydown', (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); document.getElementById('entry-submit-btn').click(); }
             if (e.key === '/' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') { e.preventDefault(); const s = document.getElementById('live-search'); s.focus(); s.select(); }
+            if (e.key === '?' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') { e.preventDefault(); openCheatSheet(); }
         });
 
         function customPrompt(message, defaultValue = '', type = 'text') {
             return new Promise((resolve) => {
                 const overlay = document.createElement('div'); overlay.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 toast-enter';
-                overlay.innerHTML = `<div class="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-200"><div class="bg-slate-50 p-4 border-b border-slate-200"><h4 class="font-bold text-sm text-slate-800">${message}</h4></div><div class="p-5"><input type="${type}" id="prompt-input" value="${defaultValue}" class="w-full px-3 py-2 border border-slate-300 rounded text-center outline-none focus:ring-2 focus:ring-primary-500 mb-4" onkeydown="if(event.key === 'Enter') document.getElementById('prompt-ok').click()"><div class="flex justify-end gap-2"><button id="prompt-cancel" class="px-4 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded">ביטול</button><button id="prompt-ok" class="px-4 py-1.5 text-xs font-bold text-white bg-primary-600 hover:bg-primary-700 rounded shadow-sm">אישור</button></div></div></div>`;
+                overlay.innerHTML = `<div class="bg-white dark:bg-slate-800 dark:text-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-700"><div class="bg-slate-50 dark:bg-slate-900 p-4 border-b dark:border-slate-700"><h4 class="font-bold text-sm text-slate-800 dark:text-white">${message}</h4></div><div class="p-5"><input type="${type}" id="prompt-input" value="${defaultValue}" class="w-full px-3 py-2 border dark:border-slate-600 rounded text-center outline-none bg-white dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 mb-4" onkeydown="if(event.key === 'Enter') document.getElementById('prompt-ok').click()"><div class="flex justify-end gap-2"><button id="prompt-cancel" class="px-4 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded">ביטול</button><button id="prompt-ok" class="px-4 py-1.5 text-xs font-bold text-white bg-primary-600 rounded shadow-sm">אישור</button></div></div></div>`;
                 document.body.appendChild(overlay); const input = overlay.querySelector('#prompt-input'); input.focus(); input.select();
                 overlay.querySelector('#prompt-ok').onclick = () => { resolve(input.value); overlay.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => overlay.remove(), 250); };
                 overlay.querySelector('#prompt-cancel').onclick = () => { resolve(null); overlay.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => overlay.remove(), 250); };
@@ -415,11 +472,11 @@
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container'); const toast = document.createElement('div');
             let icon, bgColor;
-            if(type === 'success') { icon = '<i class="fa-solid fa-circle-check text-emerald-500 text-lg"></i>'; bgColor = 'bg-white border-emerald-100'; }
-            else if(type === 'error') { icon = '<i class="fa-solid fa-triangle-exclamation text-rose-500 text-lg"></i>'; bgColor = 'bg-white border-rose-100'; }
-            else if(type === 'warning') { icon = '<i class="fa-solid fa-circle-exclamation text-amber-500 text-lg"></i>'; bgColor = 'bg-amber-50 border-amber-200'; }
-            toast.className = `toast-enter flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${bgColor} pointer-events-auto`;
-            toast.innerHTML = `${icon} <span class="font-bold text-xs text-slate-800">${message}</span>`;
+            if(type === 'success') { icon = '<i class="fa-solid fa-circle-check text-emerald-500 text-lg"></i>'; bgColor = 'bg-white dark:bg-slate-800 border-emerald-100 dark:border-emerald-900'; }
+            else if(type === 'error') { icon = '<i class="fa-solid fa-triangle-exclamation text-rose-500 text-lg"></i>'; bgColor = 'bg-white dark:bg-slate-800 border-rose-100 dark:border-rose-900'; }
+            else if(type === 'warning') { icon = '<i class="fa-solid fa-circle-exclamation text-amber-500 text-lg"></i>'; bgColor = 'bg-amber-50 dark:bg-slate-800 border-amber-200 dark:border-amber-900'; }
+            toast.className = `toast-enter flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${bgColor} pointer-events-auto dark:text-white`;
+            toast.innerHTML = `${icon} <span class="font-bold text-xs text-slate-800 dark:text-white">${message}</span>`;
             container.appendChild(toast); setTimeout(() => { toast.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => toast.remove(), 300); }, type === 'error' ? 5000 : 3000);
         }
 
@@ -436,7 +493,9 @@
 
         async function loadProducts() {
             await checkUserSession(); const res = await apiFetch('/api/products');
-            if (!res) return; products = await res.json(); renderProducts(); loadEntriesForDate(); updateQuickAddChips(); 
+            if (!res) return; products = await res.json(); 
+            productTags = JSON.parse(localStorage.getItem('product_tags') || '{}');
+            renderProducts(); loadEntriesForDate(); updateQuickAddChips(); 
         }
 
         function renderProducts() {
@@ -446,46 +505,42 @@
 
             Object.keys(products).sort((a, b) => a.localeCompare(b, 'he')).forEach(name => {
                 let trendHtml = '';
-                if (oldPrices[name] && oldPrices[name] < products[name]) trendHtml = '<i class="fa-solid fa-arrow-trend-up text-rose-500 mr-2 text-[10px]" title="המחיר עלה"></i>';
-                else if (oldPrices[name] && oldPrices[name] > products[name]) trendHtml = '<i class="fa-solid fa-arrow-trend-down text-emerald-500 mr-2 text-[10px]" title="המחיר הוזל"></i>';
+                if (oldPrices[name] && oldPrices[name] < products[name]) trendHtml = '<i class="fa-solid fa-arrow-trend-up text-rose-500 mr-1 text-[10px]" title="המחיר עלה"></i>';
+                else if (oldPrices[name] && oldPrices[name] > products[name]) trendHtml = '<i class="fa-solid fa-arrow-trend-down text-emerald-500 mr-1 text-[10px]" title="המחיר הוזל"></i>';
 
-                const editBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="edit-product-btn bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(name)}" title="עריכת מוצר"><i class="fa-solid fa-pen text-[10px]"></i></button>`;
-                const deleteBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-product-btn bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(name)}" title="מחיקת מוצר"><i class="fa-solid fa-trash-can text-[10px]"></i></button>`;
+                const tagHtml = productTags[name] ? `<span class="bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-1.5 py-0.5 rounded ml-1 border border-indigo-100 dark:border-indigo-900">${escapeHtml(productTags[name])}</span>` : '';
 
-                tbody.innerHTML += `<tr class="hover:bg-slate-50 border-r-2 ${getCategoryColor(name)}"><td class="px-4 py-2.5 text-xs font-bold text-slate-700 text-right">${trendHtml}${escapeHtml(name)}</td><td class="px-4 py-2.5 text-xs font-bold text-slate-600 text-left tabular-nums">${formatMoney(products[name])} ₪</td><td class="px-2 py-2.5 text-center flex justify-center gap-1">${editBtnHtml}${deleteBtnHtml}</td></tr>`;
+                const editBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="edit-product-btn bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 text-slate-600 dark:text-slate-300 hover:text-indigo-600 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(name)}" title="עריכה"><i class="fa-solid fa-pen text-[10px]"></i></button>`;
+                const deleteBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-product-btn bg-slate-100 dark:bg-slate-700 hover:bg-rose-50 text-slate-600 dark:text-slate-300 hover:text-rose-600 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(name)}" title="מחיקה"><i class="fa-solid fa-trash-can text-[10px]"></i></button>`;
+
+                tbody.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 border-r-2 ${getCategoryColor(name)}"><td class="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 text-right">${trendHtml}${escapeHtml(name)} ${tagHtml}</td><td class="px-3 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 text-left tabular-nums">${formatMoney(products[name])} ₪</td><td class="px-2 py-2.5 text-center flex justify-center gap-1">${editBtnHtml}${deleteBtnHtml}</td></tr>`;
                 
                 let cat = name.includes('-') ? name.split('-')[0].trim() : 'כללי'; if (!categories[cat]) categories[cat] = []; categories[cat].push(name);
             });
 
             localStorage.setItem('saved_price_history', JSON.stringify(products));
             
-            // עדכון כפתורי סינון קטגוריות מהיר
             const pillsContainer = document.getElementById('category-filter-pills');
-            let pillsHtml = `<button type="button" onclick="filterByCategory('all')" class="category-pill ${currentCategoryFilter === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} px-3 py-1 rounded-full text-xs font-bold transition-all">הכל</button>`;
+            let pillsHtml = `<button type="button" onclick="filterByCategory('all')" class="category-pill ${currentCategoryFilter === 'all' ? 'bg-slate-900 dark:bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'} px-3 py-1 rounded-full text-xs font-bold transition-all whitespace-nowrap">הכל</button>`;
             Object.keys(categories).sort((a, b) => a.localeCompare(b, 'he')).forEach(cat => {
                 const optgroup = document.createElement('optgroup'); optgroup.label = cat;
                 categories[cat].sort((a, b) => a.localeCompare(b, 'he')).forEach(name => { const opt = document.createElement('option'); opt.value = name; opt.textContent = name; optgroup.appendChild(opt); });
                 select.appendChild(optgroup);
                 
-                pillsHtml += `<button type="button" onclick="filterByCategory('${escapeAttr(cat)}')" class="category-pill ${currentCategoryFilter === cat ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} px-3 py-1 rounded-full text-xs font-bold transition-all">${escapeHtml(cat)}</button>`;
+                pillsHtml += `<button type="button" onclick="filterByCategory('${escapeAttr(cat)}')" class="category-pill ${currentCategoryFilter === cat ? 'bg-slate-900 dark:bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'} px-3 py-1 rounded-full text-xs font-bold transition-all whitespace-nowrap">${escapeHtml(cat)}</button>`;
             });
             pillsContainer.innerHTML = pillsHtml;
 
-            ts = new TomSelect("#entry-prod-select-ui", { 
-                create: false, 
-                sortField: { field: "text", direction: "asc" }, 
-                dropdownParent: 'body',
-                onChange: function() { updateLivePreview(); } 
-            });
+            ts = new TomSelect("#entry-prod-select-ui", { create: false, sortField: { field: "text", direction: "asc" }, dropdownParent: 'body', onChange: function() { updateLivePreview(); } });
         }
 
         function filterByCategory(cat) {
             currentCategoryFilter = cat;
             document.querySelectorAll('.category-pill').forEach(btn => {
                 if ((cat === 'all' && btn.textContent === 'הכל') || btn.textContent === cat) {
-                    btn.className = "category-pill bg-slate-900 text-white px-3 py-1 rounded-full text-xs font-bold transition-all";
+                    btn.className = "category-pill bg-slate-900 dark:bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold transition-all whitespace-nowrap";
                 } else {
-                    btn.className = "category-pill bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1 rounded-full text-xs font-bold transition-all";
+                    btn.className = "category-pill bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 px-3 py-1 rounded-full text-xs font-bold transition-all whitespace-nowrap";
                 }
             });
             filterTable();
@@ -497,7 +552,7 @@
             const container = document.getElementById('quick-add-chips');
             if(sorted.length === 0) { container.innerHTML = ''; return; }
             let html = '<span class="text-[10px] text-slate-400 font-bold ml-2"><i class="fa-solid fa-bolt text-amber-400"></i> פופולריים:</span>';
-            sorted.forEach(([name, count]) => { if(products[name]) html += `<button type="button" class="quick-add-chip-btn bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 px-2 py-0.5 rounded text-[10px] font-bold transition-all" data-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`; });
+            sorted.forEach(([name, count]) => { if(products[name]) html += `<button type="button" class="quick-add-chip-btn bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-200 hover:text-indigo-600 px-2 py-0.5 rounded text-[10px] font-bold transition-all" data-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`; });
             container.innerHTML = html;
         }
 
@@ -520,17 +575,53 @@
 
         document.getElementById('product-form').addEventListener('submit', async (e) => {
             e.preventDefault(); const btn = document.getElementById('product-submit-btn'); const originalIcon = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> מעדכן...';
-            const name = document.getElementById('prod-name').value.trim(); const price = parseFloat(document.getElementById('prod-price').value); const originalName = document.getElementById('prod-edit-original-name').value; const isEditing = !!originalName;
+            const name = document.getElementById('prod-name').value.trim(); const price = parseFloat(document.getElementById('prod-price').value); const tag = document.getElementById('prod-tag').value.trim();
+            const originalName = document.getElementById('prod-edit-original-name').value; const isEditing = !!originalName;
+            
             let res;
             if (isEditing) res = await apiFetch(`/api/products/${encodeURIComponent(originalName)}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, price }) });
             else res = await apiFetch('/api/products', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, price }) });
+            
             btn.disabled = false; btn.innerHTML = originalIcon;
-            if (res && res.ok) { cancelProductEdit(); showToast(isEditing ? `"${name}" עודכן בהצלחה!` : `"${name}" נשמר במחירון!`); loadProducts(); } else if (res) { const data = await res.json().catch(() => ({})); showToast(data.error || 'שגיאה בשמירת המוצר', 'error'); }
+            if (res && res.ok) {
+                if (tag) { productTags[name] = tag; } else { delete productTags[name]; }
+                if (isEditing && originalName !== name) { delete productTags[originalName]; }
+                localStorage.setItem('product_tags', JSON.stringify(productTags));
+                
+                cancelProductEdit(); showToast(isEditing ? `"${name}" עודכן בהצלחה!` : `"${name}" נשמר במחירון!`); loadProducts(); 
+            } else if (res) { const data = await res.json().catch(() => ({})); showToast(data.error || 'שגיאה בשמירת המוצר', 'error'); }
         });
 
-        function editProduct(name) { document.getElementById('prod-name').value = name; document.getElementById('prod-price').value = products[name] ?? ''; document.getElementById('prod-edit-original-name').value = name; document.getElementById('product-form-title').textContent = `עריכת: ${name}`; document.getElementById('product-cancel-edit-btn').classList.remove('hidden'); document.getElementById('product-submit-btn-text').textContent = 'עדכן'; document.getElementById('prod-name').focus(); }
-        function cancelProductEdit() { document.getElementById('product-form').reset(); document.getElementById('prod-edit-original-name').value = ''; document.getElementById('product-form-title').textContent = 'הוספת מוצר חדש'; document.getElementById('product-cancel-edit-btn').classList.add('hidden'); document.getElementById('product-submit-btn-text').textContent = 'שמור למחירון'; }
-        async function deleteProduct(name) { if(confirm(`למחוק את "${name}" מהמחירון?`)) { const res = await apiFetch(`/api/products/${encodeURIComponent(name)}`, { method: 'DELETE' }); if (res && res.ok) { if (document.getElementById('prod-edit-original-name').value === name) cancelProductEdit(); showToast(`"${name}" נמחק!`); loadProducts(); } } }
+        function editProduct(name) { 
+            document.getElementById('prod-name').value = name; 
+            document.getElementById('prod-price').value = products[name] ?? ''; 
+            document.getElementById('prod-tag').value = productTags[name] || '';
+            document.getElementById('prod-edit-original-name').value = name; 
+            document.getElementById('product-form-title').textContent = `עריכת: ${name}`; 
+            document.getElementById('product-cancel-edit-btn').classList.remove('hidden'); 
+            document.getElementById('product-submit-btn-text').textContent = 'עדכן'; 
+            document.getElementById('prod-name').focus(); 
+        }
+
+        function cancelProductEdit() { 
+            document.getElementById('product-form').reset(); 
+            document.getElementById('prod-edit-original-name').value = ''; 
+            document.getElementById('product-tag').value = '';
+            document.getElementById('product-form-title').textContent = 'הוספת מוצר חדש'; 
+            document.getElementById('product-cancel-edit-btn').classList.add('hidden'); 
+            document.getElementById('product-submit-btn-text').textContent = 'שמור למחירון'; 
+        }
+
+        async function deleteProduct(name) { 
+            if(confirm(`למחוק את "${name}" מהמחירון?`)) { 
+                const res = await apiFetch(`/api/products/${encodeURIComponent(name)}`, { method: 'DELETE' }); 
+                if (res && res.ok) { 
+                    delete productTags[name]; localStorage.setItem('product_tags', JSON.stringify(productTags));
+                    if (document.getElementById('prod-edit-original-name').value === name) cancelProductEdit(); 
+                    showToast(`"${name}" נמחק!`); loadProducts(); 
+                } 
+            } 
+        }
 
         document.getElementById('price-list-table-body').addEventListener('click', (e) => { const editBtn = e.target.closest('.edit-product-btn'); if (editBtn) { editProduct(editBtn.dataset.name); return; } const delBtn = e.target.closest('.delete-product-btn'); if (delBtn) { deleteProduct(delBtn.dataset.name); return; } });
 
@@ -543,30 +634,29 @@
 
         function renderEntries(entries) {
             window.currentDayEntries = entries; const tbody = document.getElementById('entries-table-body'); tbody.innerHTML = '';
-            if (entries.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-12 text-center text-slate-400 text-sm bg-slate-50/50">לא נמצאו חיובים ליום זה</td></tr>`; document.getElementById('daily-total').textContent = '0.00'; return; }
+            if (entries.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-12 text-center text-slate-400 text-sm bg-slate-50/50 dark:bg-slate-900/50">לא נמצאו חיובים ליום זה</td></tr>`; document.getElementById('daily-total').textContent = '0.00'; return; }
 
             let total = 0;
             entries.forEach((entry, index) => {
                 const price = (entry.unit_price !== undefined && entry.unit_price !== null) ? entry.unit_price : (products[entry.product_name] || 0);
                 const itemTotal = price * entry.quantity; total += itemTotal;
                 
-                const extraTag = entry.is_extra ? `<i class="fa-solid fa-bolt text-amber-500 mr-2 text-xs" title="חיוב אקסטרה"></i>` : '';
-                const noteHtml = entry.note ? `<div class="text-xs text-slate-400 font-normal mt-0.5"><i class="fa-solid fa-note-sticky ml-1 text-slate-300"></i>${escapeHtml(entry.note)}</div>` : '';
-                
+                const extraTag = entry.is_extra ? `<i class="fa-solid fa-bolt text-amber-500 mr-1 text-xs" title="חיוב אקסטרה"></i>` : '';
+                const noteHtml = entry.note ? `<div class="text-[11px] text-slate-400 dark:text-slate-400 font-normal mt-0.5"><i class="fa-solid fa-note-sticky ml-1 text-slate-300 dark:text-slate-500"></i>${escapeHtml(entry.note)}</div>` : '';
                 const cat = entry.product_name.includes('-') ? entry.product_name.split('-')[0].trim() : 'כללי';
 
                 const actionsHtml = currentUserRole !== 'viewer' ? `
-                    <div class="flex items-center justify-center gap-1.5">
-                        <button type="button" class="duplicate-entry-btn bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(entry.product_name)}" data-qty="${entry.quantity}" data-extra="${entry.is_extra}" title="שכפל שורה"><i class="fa-solid fa-copy text-[10px]"></i></button>
-                        <button type="button" class="edit-entry-btn bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-id="${entry.id}" data-qty="${entry.quantity}" title="ערוך כמות"><i class="fa-solid fa-pen text-[10px]"></i></button>
-                        <button type="button" class="delete-entry-btn bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-id="${entry.id}" title="מחק חיוב"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                    <div class="flex items-center justify-center gap-1">
+                        <button type="button" class="duplicate-entry-btn bg-slate-100 dark:bg-slate-700 hover:bg-emerald-100 text-slate-600 dark:text-slate-300 hover:text-emerald-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(entry.product_name)}" data-qty="${entry.quantity}" data-extra="${entry.is_extra}" title="שכפל"><i class="fa-solid fa-copy text-[10px]"></i></button>
+                        <button type="button" class="edit-entry-btn bg-slate-100 dark:bg-slate-700 hover:bg-indigo-100 text-slate-600 dark:text-slate-300 hover:text-indigo-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-id="${entry.id}" data-qty="${entry.quantity}" title="ערוך"><i class="fa-solid fa-pen text-[10px]"></i></button>
+                        <button type="button" class="delete-entry-btn bg-slate-100 dark:bg-slate-700 hover:bg-rose-100 text-slate-600 dark:text-slate-300 hover:text-rose-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-id="${entry.id}" title="מחק"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
                     </div>` : '';
 
                 const delay = Math.min(index * 0.03, 0.3);
-                tbody.innerHTML += `<tr class="hover:bg-slate-50 table-row-item border-r-2 ${getCategoryColor(entry.product_name)} row-enter" data-category="${escapeAttr(cat)}" style="animation-delay: ${delay}s"><td class="px-5 py-3 text-sm font-bold text-slate-700 text-right print:text-black product-name-cell">${extraTag}${escapeHtml(entry.product_name)}${noteHtml}</td><td class="px-5 py-3 text-sm text-slate-800 text-center font-bold tabular-nums print:text-black">${entry.quantity}</td><td class="px-5 py-3 text-sm text-slate-500 text-left tabular-nums print:text-black dir-ltr">${formatMoney(price)} ₪</td><td class="px-5 py-3 text-sm font-bold text-primary-700 text-left tabular-nums print:text-black dir-ltr">${formatMoney(itemTotal)} ₪</td><td class="px-3 py-3 text-center print:hidden whitespace-nowrap">${actionsHtml}</td></tr>`;
+                tbody.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 table-row-item border-r-2 ${getCategoryColor(entry.product_name)} row-enter" data-category="${escapeAttr(cat)}" style="animation-delay: ${delay}s"><td class="px-4 sm:px-5 py-3 text-sm font-bold text-slate-700 dark:text-slate-200 text-right print:text-black product-name-cell">${extraTag}${escapeHtml(entry.product_name)}${noteHtml}</td><td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200 text-center font-bold tabular-nums print:text-black">${entry.quantity}</td><td class="px-3 py-3 text-sm text-slate-500 dark:text-slate-400 text-left tabular-nums print:text-black dir-ltr">${formatMoney(price)} ₪</td><td class="px-3 py-3 text-sm font-bold text-primary-700 dark:text-indigo-400 text-left tabular-nums print:text-black dir-ltr">${formatMoney(itemTotal)} ₪</td><td class="px-2 py-3 text-center print:hidden whitespace-nowrap">${actionsHtml}</td></tr>`;
             });
             document.getElementById('daily-total').textContent = formatMoney(total);
-            filterTable(); // מפעיל סינון מיידי במידה וכבר נבחרה קטגוריה
+            filterTable();
         }
 
         document.getElementById('entries-table-body').addEventListener('click', (e) => {
@@ -591,8 +681,8 @@
         function deleteEntryWithUndo(entryId, btnElement) {
             const row = btnElement.closest('tr'); row.style.opacity = '0.2'; row.style.pointerEvents = 'none';
             const container = document.getElementById('toast-container'); const toastId = 'toast-undo-' + Date.now(); const toast = document.createElement('div'); toast.id = toastId;
-            toast.className = `toast-enter flex items-center justify-between gap-4 px-4 py-3 rounded-lg shadow-lg border border-slate-200 bg-white pointer-events-auto w-72`;
-            toast.innerHTML = `<div class="flex items-center gap-2 text-slate-600"><i class="fa-solid fa-trash-arrow-up text-slate-400"></i><span class="text-xs font-bold">החיוב הוסר זמנית.</span></div><button onclick="undoDelete(${entryId}, '${toastId}')" class="text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded text-xs font-bold transition-colors">בטל מחיקה</button>`;
+            toast.className = `toast-enter flex items-center justify-between gap-4 px-4 py-3 rounded-lg shadow-lg border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 pointer-events-auto w-72`;
+            toast.innerHTML = `<div class="flex items-center gap-2 text-slate-600 dark:text-slate-300"><i class="fa-solid fa-trash-arrow-up text-slate-400"></i><span class="text-xs font-bold">החיוב הוסר זמנית.</span></div><button onclick="undoDelete(${entryId}, '${toastId}')" class="text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-700 px-3 py-1 rounded text-xs font-bold transition-colors">בטל</button>`;
             container.appendChild(toast);
             pendingDeletions[entryId] = { timeout: setTimeout(async () => { await apiFetch(`/api/entries/${entryId}`, { method: 'DELETE' }); const t = document.getElementById(toastId); if(t) { t.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => t.remove(), 300); } delete pendingDeletions[entryId]; loadEntriesForDate(); }, 4000), row: row };
         }
@@ -612,8 +702,8 @@
             Object.keys(serverTemplates).forEach((name, index) => {
                 const itemsCount = serverTemplates[name].length;
                 const deleteActionHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-template-btn text-slate-400 hover:text-rose-500 px-2 py-1 rounded transition-colors" data-name="${escapeAttr(name)}" title="מחק"><i class="fa-solid fa-trash text-xs"></i></button>`;
-                const loadBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="load-template-btn bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50 px-3 py-1.5 rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1" data-name="${escapeAttr(name)}"><i class="fa-solid fa-download"></i> טען</button>`;
-                list.innerHTML += `<div class="flex items-center justify-between bg-white border border-slate-200 p-3 rounded-lg shadow-sm mb-2"><div class="flex flex-col"><span class="text-sm font-bold text-slate-700">${escapeHtml(name)}</span><span class="text-[10px] text-slate-400">${itemsCount} פריטים</span></div><div class="flex items-center gap-2">${loadBtnHtml}${deleteActionHtml}</div></div>`;
+                const loadBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="load-template-btn bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-slate-700 hover:bg-indigo-50 px-3 py-1.5 rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1" data-name="${escapeAttr(name)}"><i class="fa-solid fa-download"></i> טען</button>`;
+                list.innerHTML += `<div class="flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-lg shadow-sm mb-2"><div class="flex flex-col"><span class="text-sm font-bold text-slate-700 dark:text-slate-200">${escapeHtml(name)}</span><span class="text-[10px] text-slate-400">${itemsCount} פריטים</span></div><div class="flex items-center gap-2">${loadBtnHtml}${deleteActionHtml}</div></div>`;
             });
         }
 
@@ -797,12 +887,12 @@
 
         async function loadActivityLogs() {
             const res = await apiFetch('/api/logs'); if (!res) return; const logs = await res.json(); const tbody = document.getElementById('logs-table-body'); tbody.innerHTML = '';
-            logs.forEach((log) => { tbody.innerHTML += `<tr class="hover:bg-slate-50"><td class="px-4 py-2 text-slate-500 text-right">${log.time}</td><td class="px-4 py-2 font-bold text-slate-700 text-right">${log.user}</td><td class="px-4 py-2 text-primary-600 text-right font-bold">${log.action}</td><td class="px-4 py-2 text-slate-600 text-right">${log.details}</td></tr>`; });
+            logs.forEach((log) => { tbody.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td class="px-4 py-2 text-slate-500 text-right">${log.time}</td><td class="px-4 py-2 font-bold text-slate-700 dark:text-slate-200 text-right">${log.user}</td><td class="px-4 py-2 text-primary-600 dark:text-indigo-400 text-right font-bold">${log.action}</td><td class="px-4 py-2 text-slate-600 dark:text-slate-300 text-right">${log.details}</td></tr>`; });
         }
 
         async function loadUsersTable() {
             const res = await apiFetch('/api/users'); if (!res) return; const users = await res.json(); const tbody = document.getElementById('users-table-body'); tbody.innerHTML = '';
-            users.forEach((u) => { tbody.innerHTML += `<tr class="hover:bg-slate-50"><td class="px-6 py-3 font-bold text-slate-800 text-right">${escapeHtml(u.username)}</td><td class="px-6 py-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] bg-slate-100 font-bold">${translateRole(u.role)}</span></td><td class="px-6 py-3 text-center"><button class="edit-user-btn text-indigo-500 hover:bg-indigo-50 px-2 py-1 rounded" data-username="${escapeAttr(u.username)}" data-role="${escapeAttr(u.role)}"><i class="fa-solid fa-pen text-xs"></i></button> <button class="delete-user-btn text-rose-500 hover:bg-rose-50 px-2 py-1 rounded" data-id="${u.id}"><i class="fa-solid fa-trash text-xs"></i></button></td></tr>`; });
+            users.forEach((u) => { tbody.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td class="px-6 py-3 font-bold text-slate-800 dark:text-slate-200 text-right">${escapeHtml(u.username)}</td><td class="px-6 py-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-700 dark:text-slate-300 font-bold">${translateRole(u.role)}</span></td><td class="px-6 py-3 text-center"><button class="edit-user-btn text-indigo-500 hover:bg-indigo-50 dark:hover:bg-slate-700 px-2 py-1 rounded" data-username="${escapeAttr(u.username)}" data-role="${escapeAttr(u.role)}"><i class="fa-solid fa-pen text-xs"></i></button> <button class="delete-user-btn text-rose-500 hover:bg-rose-50 dark:hover:bg-slate-700 px-2 py-1 rounded" data-id="${u.id}"><i class="fa-solid fa-trash text-xs"></i></button></td></tr>`; });
         }
 
         document.getElementById('users-table-body').addEventListener('click', (e) => { const editBtn = e.target.closest('.edit-user-btn'); if (editBtn) startEditUser(editBtn.dataset.username, editBtn.dataset.role); const delBtn = e.target.closest('.delete-user-btn'); if (delBtn) deleteUser(parseInt(delBtn.dataset.id, 10)); });
