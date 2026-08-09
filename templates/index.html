@@ -49,8 +49,10 @@
             body.invoice-mode .invoice-template { display: block !important; }
         }
 
-        .ts-control { border-radius: 0.5rem; padding: 0.6rem 0.75rem; border-color: #cbd5e1; transition: all 0.2s; }
-        .ts-control.focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15); }
+        .ts-wrapper { position: relative; }
+        .ts-control { border-radius: 0.5rem !important; padding: 0.5rem 0.75rem !important; border-color: #cbd5e1 !important; font-size: 0.875rem !important; background-color: #fff !important; box-shadow: none !important; }
+        .ts-control.focus { border-color: #6366f1 !important; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15) !important; }
+        .ts-dropdown { border-radius: 0.5rem !important; margin-top: 4px !important; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important; border: 1px solid #e2e8f0 !important; z-index: 99999 !important; font-family: 'Heebo', sans-serif !important; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
@@ -444,7 +446,6 @@
                 if (oldPrices[name] && oldPrices[name] < products[name]) trendHtml = '<i class="fa-solid fa-arrow-trend-up text-rose-500 mr-2 text-[10px]" title="המחיר עלה"></i>';
                 else if (oldPrices[name] && oldPrices[name] > products[name]) trendHtml = '<i class="fa-solid fa-arrow-trend-down text-emerald-500 mr-2 text-[10px]" title="המחיר הוזל"></i>';
 
-                // כפתורים גלויים וברורים תמיד (לא שקופים)
                 const editBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="edit-product-btn bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(name)}" title="עריכת מוצר"><i class="fa-solid fa-pen text-[10px]"></i></button>`;
                 const deleteBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-product-btn bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(name)}" title="מחיקת מוצר"><i class="fa-solid fa-trash-can text-[10px]"></i></button>`;
 
@@ -459,7 +460,14 @@
                 categories[cat].sort((a, b) => a.localeCompare(b, 'he')).forEach(name => { const opt = document.createElement('option'); opt.value = name; opt.textContent = name; optgroup.appendChild(opt); });
                 select.appendChild(optgroup);
             });
-            ts = new TomSelect("#entry-prod-select-ui", { create: false, sortField: { field: "text", direction: "asc" }, onChange: function() { updateLivePreview(); } });
+
+            // תיקון: הגדרת dropdownParent ל-body כדי שהתפריט ייפתח בצורה מושלמת מעל הכל
+            ts = new TomSelect("#entry-prod-select-ui", { 
+                create: false, 
+                sortField: { field: "text", direction: "asc" }, 
+                dropdownParent: 'body',
+                onChange: function() { updateLivePreview(); } 
+            });
         }
 
         function updateQuickAddChips() {
@@ -522,8 +530,6 @@
                 const itemTotal = price * entry.quantity; total += itemTotal;
                 
                 const extraTag = entry.is_extra ? `<i class="fa-solid fa-bolt text-amber-500 mr-2 text-xs" title="חיוב אקסטרה"></i>` : '';
-                
-                // כפתורי פעולה בולטים, ברורים ולא שקופים
                 const actionsHtml = currentUserRole !== 'viewer' ? `
                     <div class="flex items-center justify-center gap-1.5">
                         <button type="button" class="duplicate-entry-btn bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(entry.product_name)}" data-qty="${entry.quantity}" data-extra="${entry.is_extra}" title="שכפל שורה"><i class="fa-solid fa-copy text-[10px]"></i></button>
