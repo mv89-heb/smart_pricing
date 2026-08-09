@@ -125,7 +125,7 @@
                                         <tr>
                                             <th class="px-5 py-2.5 text-right text-xs font-bold text-slate-500 uppercase">מוצר</th>
                                             <th class="px-5 py-2.5 text-left text-xs font-bold text-slate-500 uppercase">מחיר</th>
-                                            <th class="px-5 py-2.5 text-center text-xs font-bold text-slate-500 uppercase w-16"></th>
+                                            <th class="px-5 py-2.5 text-center text-xs font-bold text-slate-500 uppercase w-20">פעולות</th>
                                         </tr>
                                     </thead>
                                     <tbody id="price-list-table-body" class="bg-white divide-y divide-slate-50"></tbody>
@@ -165,7 +165,7 @@
                     <!-- אזור טבלה והזנה -->
                     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex-grow flex flex-col print:shadow-none print:border-0">
                         
-                        <!-- טופס הזנה מקושר ומהודק -->
+                        <!-- טופס הזנה -->
                         <div id="entry-form-container" class="p-5 border-b border-slate-200 bg-slate-50/50 print:hidden relative">
                             <div id="quick-add-chips" class="flex flex-wrap items-center gap-2 mb-4 empty:hidden"></div>
 
@@ -216,14 +216,14 @@
                                         <th class="px-5 py-3 text-center text-xs font-bold text-slate-500 uppercase print:text-black w-20">כמות</th>
                                         <th class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase print:text-black w-28">מחיר</th>
                                         <th class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase print:text-black w-28">סה"כ</th>
-                                        <th class="px-3 py-3 text-center text-xs font-bold text-slate-500 uppercase print:hidden w-28">פעולות</th>
+                                        <th class="px-3 py-3 text-center text-xs font-bold text-slate-500 uppercase print:hidden w-32">פעולות</th>
                                     </tr>
                                 </thead>
                                 <tbody id="entries-table-body" class="bg-white divide-y divide-slate-50 print:border-b"></tbody>
                             </table>
                         </div>
 
-                        <!-- פוטר שחור (סיכומים) -->
+                        <!-- פוטר סיכומים -->
                         <div class="bg-slate-800 text-white p-5 flex flex-col sm:flex-row items-center justify-between mt-auto print:bg-white print:text-black print:border-t-2 print:p-2 gap-4 rounded-b-2xl print:rounded-none">
                             <div class="flex items-center">
                                 <div>
@@ -249,7 +249,6 @@
     <!-- מודלים ומערכת -->
     <div id="toast-container" class="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none print:hidden"></div>
 
-    <!-- הדפסת תבנית בלבד -->
     <div class="invoice-template p-10 max-w-2xl mx-auto">
         <div class="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-8">
             <div><h1 class="text-2xl font-bold text-slate-900">דרישת תשלום רשמית</h1><p class="text-slate-500 text-sm mt-1">ניהול חיובי מכללה</p></div>
@@ -270,20 +269,17 @@
         </table>
     </div>
 
-    <!-- שאר המודלים (Admin, Templates, Dashboard) -->
-    <!-- ... הדאשבורד, מסך המנהל והתבניות נשארו ללא שינוי, העיצוב יחול עליהם טבעית ... -->
+    <!-- Modals (Admin, Templates, Dashboard) -->
     <div id="admin-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
         <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="admin-content">
             <div class="bg-slate-800 p-4 flex justify-between items-center text-white shrink-0">
                 <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-gear text-slate-300"></i> הגדרות מנהל ובקרה</h3>
                 <button onclick="closeAdminPanel()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
-            
             <div class="bg-slate-100 border-b flex px-4 gap-2 shrink-0">
                 <button id="tab-logs-btn" onclick="switchAdminTab('logs')" class="px-4 py-3 border-b-2 border-primary-600 font-bold text-sm text-primary-600">יומן פעולות</button>
                 <button id="tab-users-btn" onclick="switchAdminTab('users')" class="px-4 py-3 border-b-2 border-transparent font-bold text-sm text-slate-600 hover:text-slate-900">משתמשי צוות</button>
             </div>
-
             <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
                 <div id="admin-tab-logs" class="space-y-6">
                     <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex justify-between items-center">
@@ -294,7 +290,6 @@
                         <table class="min-w-full divide-y divide-slate-100 text-sm"><tbody id="logs-table-body"></tbody></table>
                     </div>
                 </div>
-
                 <div id="admin-tab-users" class="hidden space-y-6">
                     <form id="user-form" class="bg-white p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end shadow-sm">
                         <div><label class="block text-xs font-bold text-slate-600 mb-1">שם משתמש</label><input type="text" id="user-username" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500"></div>
@@ -449,10 +444,11 @@
                 if (oldPrices[name] && oldPrices[name] < products[name]) trendHtml = '<i class="fa-solid fa-arrow-trend-up text-rose-500 mr-2 text-[10px]" title="המחיר עלה"></i>';
                 else if (oldPrices[name] && oldPrices[name] > products[name]) trendHtml = '<i class="fa-solid fa-arrow-trend-down text-emerald-500 mr-2 text-[10px]" title="המחיר הוזל"></i>';
 
-                const editBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="edit-product-btn text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 p-1 rounded transition-colors" data-name="${escapeAttr(name)}" title="עריכת מוצר"><i class="fa-solid fa-pen text-xs"></i></button>`;
-                const deleteBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-product-btn text-slate-300 hover:text-rose-600 hover:bg-rose-50 p-1 rounded transition-colors" data-name="${escapeAttr(name)}" title="מחיקת מוצר"><i class="fa-solid fa-trash-can text-xs"></i></button>`;
+                // כפתורים גלויים וברורים תמיד (לא שקופים)
+                const editBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="edit-product-btn bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(name)}" title="עריכת מוצר"><i class="fa-solid fa-pen text-[10px]"></i></button>`;
+                const deleteBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-product-btn bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(name)}" title="מחיקת מוצר"><i class="fa-solid fa-trash-can text-[10px]"></i></button>`;
 
-                tbody.innerHTML += `<tr class="hover:bg-slate-50 group border-r-2 ${getCategoryColor(name)}"><td class="px-4 py-2.5 text-xs font-bold text-slate-700 text-right">${trendHtml}${escapeHtml(name)}</td><td class="px-4 py-2.5 text-xs font-bold text-slate-500 text-left tabular-nums">${formatMoney(products[name])} ₪</td><td class="px-2 py-2.5 text-center flex justify-center gap-1 opacity-20 group-hover:opacity-100 transition-opacity">${editBtnHtml}${deleteBtnHtml}</td></tr>`;
+                tbody.innerHTML += `<tr class="hover:bg-slate-50 border-r-2 ${getCategoryColor(name)}"><td class="px-4 py-2.5 text-xs font-bold text-slate-700 text-right">${trendHtml}${escapeHtml(name)}</td><td class="px-4 py-2.5 text-xs font-bold text-slate-600 text-left tabular-nums">${formatMoney(products[name])} ₪</td><td class="px-2 py-2.5 text-center flex justify-center gap-1">${editBtnHtml}${deleteBtnHtml}</td></tr>`;
                 
                 let cat = name.includes('-') ? name.split('-')[0].trim() : 'כללי'; if (!categories[cat]) categories[cat] = []; categories[cat].push(name);
             });
@@ -525,8 +521,15 @@
                 const price = (entry.unit_price !== undefined && entry.unit_price !== null) ? entry.unit_price : (products[entry.product_name] || 0);
                 const itemTotal = price * entry.quantity; total += itemTotal;
                 
-                const extraTag = entry.is_extra ? `<i class="fa-solid fa-bolt text-amber-400 mr-2 text-xs" title="חיוב אקסטרה"></i>` : '';
-                const actionsHtml = currentUserRole !== 'viewer' ? `<div class="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button type="button" class="duplicate-entry-btn text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 p-1.5 rounded transition-colors" data-name="${escapeAttr(entry.product_name)}" data-qty="${entry.quantity}" data-extra="${entry.is_extra}" title="שכפל"><i class="fa-solid fa-copy"></i></button><button type="button" class="edit-entry-btn text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 p-1.5 rounded transition-colors" data-id="${entry.id}" data-qty="${entry.quantity}" title="ערוך כמות"><i class="fa-solid fa-pen"></i></button><button type="button" class="delete-entry-btn text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded transition-colors" data-id="${entry.id}" title="מחק"><i class="fa-solid fa-xmark text-lg leading-none"></i></button></div>` : '';
+                const extraTag = entry.is_extra ? `<i class="fa-solid fa-bolt text-amber-500 mr-2 text-xs" title="חיוב אקסטרה"></i>` : '';
+                
+                // כפתורי פעולה בולטים, ברורים ולא שקופים
+                const actionsHtml = currentUserRole !== 'viewer' ? `
+                    <div class="flex items-center justify-center gap-1.5">
+                        <button type="button" class="duplicate-entry-btn bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-name="${escapeAttr(entry.product_name)}" data-qty="${entry.quantity}" data-extra="${entry.is_extra}" title="שכפל שורה"><i class="fa-solid fa-copy text-[10px]"></i></button>
+                        <button type="button" class="edit-entry-btn bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-id="${entry.id}" data-qty="${entry.quantity}" title="ערוך כמות"><i class="fa-solid fa-pen text-[10px]"></i></button>
+                        <button type="button" class="delete-entry-btn bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 px-2 py-1 rounded text-xs font-bold transition-colors" data-id="${entry.id}" title="מחק חיוב"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                    </div>` : '';
 
                 const delay = Math.min(index * 0.03, 0.3);
                 tbody.innerHTML += `<tr class="hover:bg-slate-50 table-row-item border-r-2 ${getCategoryColor(entry.product_name)} row-enter" style="animation-delay: ${delay}s"><td class="px-5 py-3 text-sm font-bold text-slate-700 text-right print:text-black product-name-cell">${extraTag}${escapeHtml(entry.product_name)}</td><td class="px-5 py-3 text-sm text-slate-800 text-center font-bold tabular-nums print:text-black">${entry.quantity}</td><td class="px-5 py-3 text-sm text-slate-500 text-left tabular-nums print:text-black dir-ltr">${formatMoney(price)} ₪</td><td class="px-5 py-3 text-sm font-bold text-primary-700 text-left tabular-nums print:text-black dir-ltr">${formatMoney(itemTotal)} ₪</td><td class="px-3 py-3 text-center print:hidden whitespace-nowrap">${actionsHtml}</td></tr>`;
@@ -672,9 +675,9 @@
             if (!budgetVal || budgetVal <= 0 || currentGrandTotal === 0) { bar.style.width = '0%'; text.textContent = '0%'; return; }
             const percentage = (currentGrandTotal / budgetVal) * 100; const displayPercent = Math.min(percentage, 100).toFixed(0);
             bar.style.width = `${displayPercent}%`; text.textContent = `${displayPercent}%`;
-            if (percentage < 75) { bar.className = 'bg-primary-500 h-full transition-all duration-700'; }
-            else if (percentage < 90) { bar.className = 'bg-amber-500 h-full transition-all duration-700'; }
-            else { bar.className = 'bg-rose-500 h-full transition-all duration-700'; }
+            if (percentage < 75) { bar.className = 'bg-primary-500 h-full transition-all duration-500'; }
+            else if (percentage < 90) { bar.className = 'bg-amber-500 h-full transition-all duration-500'; }
+            else { bar.className = 'bg-rose-500 h-full transition-all duration-500'; }
         }
 
         async function openDashboard(fromPicker = false) {
