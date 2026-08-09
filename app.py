@@ -18,9 +18,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# ---------------------------------------------------------
-# טבלאות קיימות
-# ---------------------------------------------------------
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -33,10 +30,8 @@ class DailyEntry(db.Model):
     quantity = db.Column(db.Float, nullable=False)
     is_extra = db.Column(db.Boolean, default=False)
     unit_price = db.Column(db.Float, nullable=True)
+    note = db.Column(db.String(255), nullable=True) # עמודה חדשה להערות אישיות
 
-# ---------------------------------------------------------
-# טבלאות תשתית (לוגים, משתמשים ותבניות)
-# ---------------------------------------------------------
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
@@ -75,14 +70,21 @@ def _run_migrations():
         if not _column_exists('daily_entry', 'unit_price'):
             db.session.execute(text('ALTER TABLE daily_entry ADD COLUMN unit_price FLOAT'))
             db.session.commit()
-    except Exception as e:
+    except Exception:
+        db.session.rollback()
+
+    try:
+        if not _column_exists('daily_entry', 'note'):
+            db.session.execute(text('ALTER TABLE daily_entry ADD COLUMN note VARCHAR(255)'))
+            db.session.commit()
+    except Exception:
         db.session.rollback()
 
     try:
         if db.engine.name != 'sqlite':
             db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password TYPE VARCHAR(255)'))
             db.session.commit()
-    except Exception as e:
+    except Exception:
         db.session.rollback()
 
 with app.app_context():
@@ -94,97 +96,57 @@ with app.app_context():
     _run_migrations()
 
     if User.query.count() == 0:
-        # אבטחה: יצירת סיסמה אקראית למנהל הדיפולטיבי במקום סיסמה קשיחה
         temp_pass = secrets.token_hex(4)
         default_admin = User(username='admin', password=generate_password_hash(temp_pass), role='admin')
         db.session.add(default_admin)
         db.session.commit()
-        print("\n" + "="*50)
-        print(f"SECURITY NOTICE: Initial admin user created.")
-        print(f"Username: admin | Password: {temp_pass}")
-        print("="*50 + "\n")
+        print(f"\nSECURITY NOTICE: Admin created. User: admin | Pass: {temp_pass}\n")
 
 def log_activity(action, details):
     try:
         current_user = session.get('username', 'מערכת')
-        new_log = ActivityLog(action=action, details=details, username=current_user)
-        db.session.add(new_log)
-        
-        # מניעת Log Bloat: ניקוי רשומות ישנות מעבר ל-1000
-        log_count = ActivityLog.query.count()
-        if log_count > 1000:
-            old_logs = ActivityLog.query.order_by(ActivityLog.timestamp.asc()).limit(log_count - 1000)
-            for log in old_logs:
-                db.session.delete(log)
-                
+        db.session.add(ActivityLog(action=action, details=details, username=current_user))
+        if ActivityLog.query.count() > 1000:
+            oldest = ActivityLog.query.order_by(ActivityLog.timestamp.asc()).first()
+            if oldest: db.session.delete(oldest)
         db.session.commit()
-    except Exception as e:
-        print(f"Log Error: {e}")
+    except Exception:
         db.session.rollback()
 
-# ---------------------------------------------------------
-# הרשאות ואבטחה (CSRF)
-# ---------------------------------------------------------
 @app.before_request
 def require_login():
-    allowed_routes = ['login', 'static']
-    if request.endpoint not in allowed_routes:
+    if request.endpoint not in ['login', 'static']:
         if request.path.startswith('/api/'):
-            # הגנת CSRF - מניעת בקשות משנות מצב (POST/PUT/DELETE) ממקורות זרים
-            if request.method in ['POST', 'PUT', 'DELETE']:
-                if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
-                    return jsonify({"error": "CSRF verification failed"}), 403
-            
+            if request.method in ['POST', 'PUT', 'DELETE'] and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+                return jsonify({"error": "CSRF verification failed"}), 403
             if not session.get('logged_in'):
                 return jsonify({"error": "Unauthorized"}), 401
         elif not session.get('logged_in'):
             return redirect(url_for('login'))
 
-def get_current_role():
-    return session.get('role', 'viewer')
+def is_admin(): return session.get('role', 'viewer') == 'admin'
+def is_viewer(): return session.get('role', 'viewer') == 'viewer'
 
-def is_admin():
-    return get_current_role() == 'admin'
-
-def is_viewer():
-    return get_current_role() == 'viewer'
-
-# ---------------------------------------------------------
-# נתיבים וממשק
-# ---------------------------------------------------------
 @app.route('/')
-def index():
-    return render_template('index.html')
+def index(): return render_template('index.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'GET':
-        return render_template('login.html')
-
+    if request.method == 'GET': return render_template('login.html')
     data = request.json or {}
-    username = data.get('username')
-    password = data.get('password')
-
-    user = User.query.filter_by(username=username).first()
+    user = User.query.filter_by(username=data.get('username')).first()
     valid = False
-
     if user:
-        try:
-            valid = check_password_hash(user.password, password)
-        except Exception:
-            valid = False
-        if not valid and user.password == password:
+        try: valid = check_password_hash(user.password, data.get('password'))
+        except Exception: valid = False
+        if not valid and user.password == data.get('password'):
             valid = True
-            user.password = generate_password_hash(password)
+            user.password = generate_password_hash(data.get('password'))
             db.session.commit()
-
     if user and valid:
-        session['logged_in'] = True
-        session['username'] = user.username
-        session['role'] = user.role
+        session['logged_in'] = True; session['username'] = user.username; session['role'] = user.role
         log_activity('LOGIN', "התחברות למערכת")
         return jsonify({"success": True, "role": user.role, "username": user.username})
-
     return jsonify({"success": False, "message": "שם משתמש או סיסמה שגויים"}), 401
 
 @app.route('/logout')
@@ -195,360 +157,225 @@ def logout():
 
 @app.route('/api/products', methods=['GET'])
 def get_products():
-    try:
-        products = Product.query.all()
-        return jsonify({p.name: p.price for p in products})
-    except Exception as e:
-        return jsonify({"error": "שגיאת מסד נתונים"}), 500
+    return jsonify({p.name: p.price for p in Product.query.all()})
 
 @app.route('/api/products', methods=['POST'])
 def add_product():
-    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות עדכון"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
     data = request.json or {}
     try:
-        name = (data.get('name') or '').strip()
-        price = data.get('price')
-        if not name:
-            return jsonify({"success": False, "error": "שם מוצר לא יכול להיות ריק"}), 400
-        try:
-            price = float(price)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "error": "מחיר לא תקין"}), 400
-        if price < 0:
-            return jsonify({"success": False, "error": "המחיר לא יכול להיות שלילי"}), 400
-
+        name = (data.get('name') or '').strip(); price = float(data.get('price'))
+        if not name or price < 0: return jsonify({"success": False, "error": "נתונים שגויים"}), 400
         product = Product.query.filter_by(name=name).first()
         if product:
-            old_price = product.price
             product.price = price
-            log_activity('UPDATE_PRICE', f"מוצר: {name}, {old_price} -> {price}")
+            log_activity('UPDATE_PRICE', f"מוצר: {name}, מחיר: {price}")
         else:
             db.session.add(Product(name=name, price=price))
-            log_activity('NEW_PRODUCT', f"מוצר חדש: {name}, מחיר: {price}")
+            log_activity('NEW_PRODUCT', f"מוצר חדש: {name}")
         db.session.commit()
         return jsonify({"success": True})
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/products/<path:name>', methods=['PUT'])
 def update_product(name):
-    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות עדכון"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
     data = request.json or {}
     try:
         product = Product.query.filter_by(name=name).first()
-        if not product:
-            return jsonify({"success": False, "error": "המוצר לא נמצא"}), 404
-
-        new_name = (data.get('name') or name).strip()
-        price = data.get('price', product.price)
-        try:
-            price = float(price)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "error": "מחיר לא תקין"}), 400
-        if price < 0:
-            return jsonify({"success": False, "error": "המחיר לא יכול להיות שלילי"}), 400
-        if not new_name:
-            return jsonify({"success": False, "error": "שם מוצר לא יכול להיות ריק"}), 400
-
+        if not product: return jsonify({"success": False, "error": "לא נמצא"}), 404
+        new_name = (data.get('name') or name).strip(); price = float(data.get('price', product.price))
+        if price < 0 or not new_name: return jsonify({"success": False, "error": "נתונים שגויים"}), 400
         if new_name != name and Product.query.filter_by(name=new_name).first():
-            return jsonify({"success": False, "error": f'מוצר בשם "{new_name}" כבר קיים'}), 400
-
-        old_price = product.price
-        old_name = product.name
-        product.price = price
-        product.name = new_name
-
-        if new_name != old_name:
-            DailyEntry.query.filter_by(product_name=old_name).update({DailyEntry.product_name: new_name})
-            log_activity('RENAME_PRODUCT', f"שינוי שם מוצר: {old_name} -> {new_name}")
-
-        if old_price != price:
-            log_activity('UPDATE_PRICE', f"מוצר: {new_name}, {old_price} -> {price}")
-
+            return jsonify({"success": False, "error": 'מוצר קיים'}), 400
+        product.price = price; product.name = new_name
+        if new_name != name:
+            DailyEntry.query.filter_by(product_name=name).update({DailyEntry.product_name: new_name})
         db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/products/<path:name>', methods=['DELETE'])
 def delete_product(name):
-    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
     try:
         product = Product.query.filter_by(name=name).first()
-        if product:
-            db.session.delete(product)
-            db.session.commit()
-            log_activity('DELETE_PRODUCT', f"מחיקת מוצר: {name}")
+        if product: db.session.delete(product); db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/entries/<date>', methods=['GET'])
 def get_entries(date):
-    try:
-        entries = DailyEntry.query.filter_by(date=date).all()
-        return jsonify([{
-            'id': e.id, 'product_name': e.product_name, 'quantity': e.quantity,
-            'is_extra': e.is_extra, 'unit_price': e.unit_price
-        } for e in entries])
-    except Exception:
-        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
+    entries = DailyEntry.query.filter_by(date=date).all()
+    return jsonify([{'id': e.id, 'product_name': e.product_name, 'quantity': e.quantity, 'is_extra': e.is_extra, 'unit_price': e.unit_price, 'note': e.note} for e in entries])
 
 @app.route('/api/entries', methods=['POST'])
 def add_entry():
-    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות הזנה"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
     data = request.json or {}
     try:
-        date = data['date']
-        product_name = data['product_name']
-        quantity = float(data['quantity'])
-        is_extra = bool(data.get('is_extra', False))
-
-        if quantity <= 0:
-            return jsonify({"success": False, "error": "הכמות חייבת להיות גדולה מאפס"}), 400
-
+        date = data['date']; product_name = data['product_name']; quantity = float(data['quantity'])
+        is_extra = bool(data.get('is_extra', False)); note = (data.get('note') or '').strip()
+        if quantity <= 0: return jsonify({"success": False, "error": "כמות חייבת להיות גדולה מאפס"}), 400
         product = Product.query.filter_by(name=product_name).first()
         current_price = product.price if product else 0
-
+        
         entry = DailyEntry.query.filter_by(date=date, product_name=product_name, is_extra=is_extra).first()
-        if entry:
-            # מניעת תנאי תחרות (Race Condition) - עדכון אטומי של הכמות
+        if entry and not note: # אם אין הערה חדשה, מעדכן כמויות
             entry.quantity = DailyEntry.quantity + quantity
             entry.unit_price = current_price
-            log_activity('UPDATE_ENTRY', f"עדכון כמות (+{quantity}) ל-{product_name} בתאריך {date}")
-        else:
-            entry = DailyEntry(date=date, product_name=product_name, quantity=quantity,
-                                is_extra=is_extra, unit_price=current_price)
-            db.session.add(entry)
-            log_activity('NEW_ENTRY', f"חיוב חדש: {quantity} x {product_name} בתאריך {date}")
+        else: # אם יש הערה, יוצר שורה נפרדת למניעת דריסת הערות שונות
+            db.session.add(DailyEntry(date=date, product_name=product_name, quantity=quantity, is_extra=is_extra, unit_price=current_price, note=note if note else None))
         db.session.commit()
         return jsonify({"success": True})
     except (KeyError, TypeError, ValueError):
-        return jsonify({"success": False, "error": "נתונים חסרים או לא תקינים"}), 400
-    except SQLAlchemyError as e:
+        return jsonify({"success": False, "error": "נתונים שגויים"}), 400
+    except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/entries/<int:entry_id>', methods=['PUT'])
 def update_entry(entry_id):
-    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות עדכון"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
     data = request.json or {}
     try:
         entry = DailyEntry.query.get(entry_id)
-        if not entry:
-            return jsonify({"success": False, "error": "החיוב לא נמצא"}), 404
-
+        if not entry: return jsonify({"success": False, "error": "לא נמצא"}), 404
         if 'quantity' in data:
-            quantity = float(data['quantity'])
-            if quantity <= 0:
-                return jsonify({"success": False, "error": "הכמות חייבת להיות גדולה מאפס"}), 400
-            entry.quantity = quantity
-        if 'is_extra' in data:
-            entry.is_extra = bool(data['is_extra'])
-
-        log_activity('EDIT_ENTRY', f"עריכת חיוב: כמות {entry.quantity} x {entry.product_name} בתאריך {entry.date}")
+            q = float(data['quantity'])
+            if q <= 0: return jsonify({"success": False, "error": "כמות שגויה"}), 400
+            entry.quantity = q
+        if 'is_extra' in data: entry.is_extra = bool(data['is_extra'])
+        if 'note' in data: entry.note = (data['note'] or '').strip() or None
         db.session.commit()
         return jsonify({"success": True})
-    except (TypeError, ValueError):
-        return jsonify({"success": False, "error": "נתונים לא תקינים"}), 400
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
 def delete_entry(entry_id):
-    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
     try:
         entry = DailyEntry.query.get(entry_id)
-        if entry:
-            log_activity('DELETE_ENTRY', f"מחיקת חיוב: {entry.quantity} x {entry.product_name} מתאריך {entry.date}")
-            db.session.delete(entry)
-            db.session.commit()
+        if entry: db.session.delete(entry); db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/bulk/entries/<date>', methods=['DELETE'])
 def clear_date_entries(date):
-    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
     try:
-        deleted_count = DailyEntry.query.filter_by(date=date).delete()
-        log_activity('CLEAR_DAY', f"ניקוי יום מלא מתאריך {date} ({deleted_count} חיובים הוסרו)")
-        db.session.commit()
+        DailyEntry.query.filter_by(date=date).delete(); db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/bulk/season', methods=['DELETE'])
 def reset_season():
-    if not is_admin(): return jsonify({"success": False, "error": "הרשאת מנהל נדרשת לפעולה זו"}), 403
+    if not is_admin(): return jsonify({"success": False, "error": "נדרש מנהל"}), 403
     try:
-        count = DailyEntry.query.delete()
-        log_activity('SEASON_RESET', f"איפוס עונה מלא ({count} חיובים נמחקו מהמערכת)")
-        db.session.commit()
-        return jsonify({"success": True, "deleted": count})
+        DailyEntry.query.delete(); db.session.commit()
+        return jsonify({"success": True})
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/report/month/<year_month>', methods=['GET'])
 def get_monthly_report(year_month):
-    try:
-        entries = DailyEntry.query.filter(DailyEntry.date.startswith(year_month)).all()
-        return jsonify([{
-            'id': e.id, 'date': e.date, 'product_name': e.product_name, 'quantity': e.quantity,
-            'is_extra': e.is_extra, 'unit_price': e.unit_price
-        } for e in entries])
-    except Exception:
-        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
+    entries = DailyEntry.query.filter(DailyEntry.date.startswith(year_month)).all()
+    return jsonify([{'id': e.id, 'date': e.date, 'product_name': e.product_name, 'quantity': e.quantity, 'is_extra': e.is_extra, 'unit_price': e.unit_price, 'note': e.note} for e in entries])
 
-# ---------------------------------------------------------
-# API של תבניות שרת (מניעת אובדן נתונים בין מכשירים)
-# ---------------------------------------------------------
 @app.route('/api/templates', methods=['GET'])
 def get_templates():
-    try:
-        templates = BillingTemplate.query.all()
-        result = {}
-        for t in templates:
-            result[t.name] = [{'product_name': i.product_name, 'quantity': i.quantity, 'is_extra': i.is_extra} for i in t.items]
-        return jsonify(result)
-    except Exception:
-        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
+    return jsonify({t.name: [{'product_name': i.product_name, 'quantity': i.quantity, 'is_extra': i.is_extra} for i in t.items] for t in BillingTemplate.query.all()})
 
 @app.route('/api/templates', methods=['POST'])
 def save_template():
-    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות עריכה"}), 403
-    data = request.json or {}
-    name = data.get('name')
-    items = data.get('items', [])
-    if not name or not items:
-        return jsonify({"success": False, "error": "נתונים חסרים"}), 400
-    
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
+    data = request.json or {}; name = data.get('name'); items = data.get('items', [])
+    if not name or not items: return jsonify({"success": False, "error": "נתונים חסרים"}), 400
     try:
         existing = BillingTemplate.query.filter_by(name=name).first()
-        if existing:
-            db.session.delete(existing)
-            
-        new_template = BillingTemplate(name=name)
-        db.session.add(new_template)
-        for item in items:
-            new_item = BillingTemplateItem(
-                template=new_template, 
-                product_name=item['product_name'], 
-                quantity=item['quantity'], 
-                is_extra=item.get('is_extra', False)
-            )
-            db.session.add(new_item)
-        
-        log_activity('SAVE_TEMPLATE', f"שמירת תבנית עבודה חדשה: {name}")
+        if existing: db.session.delete(existing)
+        t = BillingTemplate(name=name); db.session.add(t)
+        for i in items: db.session.add(BillingTemplateItem(template=t, product_name=i['product_name'], quantity=i['quantity'], is_extra=i.get('is_extra', False)))
         db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/templates/<path:name>', methods=['DELETE'])
 def delete_template(name):
     if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
     try:
-        template = BillingTemplate.query.filter_by(name=name).first()
-        if template:
-            db.session.delete(template)
-            log_activity('DELETE_TEMPLATE', f"מחיקת תבנית עבודה: {name}")
-            db.session.commit()
+        t = BillingTemplate.query.filter_by(name=name).first()
+        if t: db.session.delete(t); db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
-# ---------------------------------------------------------
-# API של מנהלים (משתמשים ולוגים)
-# ---------------------------------------------------------
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
-    if not is_admin(): return jsonify({"error": "גישת מנהל נדרשת"}), 403
-    try:
-        logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(200).all()
-        return jsonify([{'time': l.timestamp.strftime('%d/%m/%Y %H:%M'), 'user': l.username, 'action': l.action, 'details': l.details} for l in logs])
-    except Exception:
-        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
+    if not is_admin(): return jsonify({"error": "נדרש מנהל"}), 403
+    return jsonify([{'time': l.timestamp.strftime('%d/%m/%Y %H:%M'), 'user': l.username, 'action': l.action, 'details': l.details} for l in ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(200).all()])
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
-    if not is_admin(): return jsonify({"error": "גישת מנהל נדרשת"}), 403
-    try:
-        users = User.query.all()
-        return jsonify([{'id': u.id, 'username': u.username, 'role': u.role} for u in users])
-    except Exception:
-        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
+    if not is_admin(): return jsonify({"error": "נדרש מנהל"}), 403
+    return jsonify([{'id': u.id, 'username': u.username, 'role': u.role} for u in User.query.all()])
 
 @app.route('/api/users', methods=['POST'])
 def create_or_update_user():
-    if not is_admin(): return jsonify({"error": "גישת מנהל נדרשת"}), 403
+    if not is_admin(): return jsonify({"error": "נדרש מנהל"}), 403
     data = request.json or {}
     try:
-        username = (data.get('username') or '').strip()
-        password = data.get('password') or ''
-        role = data.get('role', 'viewer')
-        if not username:
-            return jsonify({"success": False, "error": "שם משתמש לא יכול להיות ריק"}), 400
-
+        username = (data.get('username') or '').strip(); password = data.get('password') or ''; role = data.get('role', 'viewer')
+        if not username: return jsonify({"success": False, "error": "שם משתמש ריק"}), 400
         user = User.query.filter_by(username=username).first()
         if user:
-            if password:
-                user.password = generate_password_hash(password)
+            if password: user.password = generate_password_hash(password)
             user.role = role
-            log_activity('UPDATE_USER', f"עדכון משתמש: {username} לתפקיד {role}")
         else:
-            if not password:
-                return jsonify({"success": False, "error": "יש להזין סיסמה למשתמש חדש"}), 400
+            if not password: return jsonify({"success": False, "error": "חובה סיסמה"}), 400
             db.session.add(User(username=username, password=generate_password_hash(password), role=role))
-            log_activity('CREATE_USER', f"משתמש חדש: {username} ({role})")
         db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
 def delete_user(user_id):
-    if not is_admin(): return jsonify({"error": "גישת מנהל נדרשת"}), 403
+    if not is_admin(): return jsonify({"error": "נדרש מנהל"}), 403
     try:
-        user = User.query.get(user_id)
-        if user:
-            if user.username == session.get('username'):
-                return jsonify({"success": False, "error": "אינך יכול למחוק את עצמך"}), 400
-            log_activity('DELETE_USER', f"מחיקת משתמש: {user.username}")
-            db.session.delete(user)
-            db.session.commit()
+        u = User.query.get(user_id)
+        if u and u.username != session.get('username'):
+            db.session.delete(u); db.session.commit()
         return jsonify({"success": True})
     except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 @app.route('/api/backup', methods=['GET'])
 def backup_data():
-    if not is_admin(): return jsonify({"error": "גישת מנהל נדרשת"}), 403
-    try:
-        products = {p.name: p.price for p in Product.query.all()}
-        entries = [{'date': e.date, 'product_name': e.product_name, 'quantity': e.quantity,
-                    'is_extra': e.is_extra, 'unit_price': e.unit_price} for e in DailyEntry.query.all()]
-        return jsonify({"products": products, "entries": entries, "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')})
-    except Exception:
-        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
+    if not is_admin(): return jsonify({"error": "נדרש מנהל"}), 403
+    return jsonify({"products": {p.name: p.price for p in Product.query.all()}, "entries": [{'date': e.date, 'product_name': e.product_name, 'quantity': e.quantity, 'is_extra': e.is_extra, 'unit_price': e.unit_price, 'note': e.note} for e in DailyEntry.query.all()], "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')})
 
 @app.route('/api/current_user', methods=['GET'])
 def get_current_user_info():
-    return jsonify({
-        "username": session.get('username', 'אורח'),
-        "role": session.get('role', 'viewer')
-    })
+    return jsonify({"username": session.get('username', 'אורח'), "role": session.get('role', 'viewer')})
 
 if __name__ == '__main__':
     app.run(debug=True)
