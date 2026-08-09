@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
@@ -18,7 +19,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # ---------------------------------------------------------
-# טבלאות קיימות - לא נוגעים במבנה הבסיסי (Backward Compatible)
+# טבלאות קיימות
 # ---------------------------------------------------------
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -34,7 +35,7 @@ class DailyEntry(db.Model):
     unit_price = db.Column(db.Float, nullable=True)
 
 # ---------------------------------------------------------
-# טבלאות חדשות בלבד - מתווספות למסד הקיים (Additive)
+# טבלאות תשתית (לוגים, משתמשים ותבניות)
 # ---------------------------------------------------------
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -49,6 +50,18 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='viewer')
 
+class BillingTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    items = db.relationship('BillingTemplateItem', backref='template', cascade="all, delete-orphan")
+
+class BillingTemplateItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('billing_template.id'), nullable=False)
+    product_name = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    is_extra = db.Column(db.Boolean, default=False)
+
 def _column_exists(table_name, column_name):
     try:
         insp = db.inspect(db.engine)
@@ -58,55 +71,74 @@ def _column_exists(table_name, column_name):
         return True 
 
 def _run_migrations():
-    """מיגרציות תוספתיות קטנות שלא פוגעות בנתונים קיימים."""
     try:
         if not _column_exists('daily_entry', 'unit_price'):
             db.session.execute(text('ALTER TABLE daily_entry ADD COLUMN unit_price FLOAT'))
             db.session.commit()
     except Exception as e:
         db.session.rollback()
-        print(f"DEBUG: מיגרציית unit_price נכשלה: {e}")
 
     try:
-        # תיקון: SQLite לא תומך ב-ALTER COLUMN TYPE, נבצע זאת רק אם המסד הוא PostgreSQL
         if db.engine.name != 'sqlite':
             db.session.execute(text('ALTER TABLE "user" ALTER COLUMN password TYPE VARCHAR(255)'))
             db.session.commit()
     except Exception as e:
         db.session.rollback()
-        print(f"DEBUG: מיגרציית הרחבת password נכשלה: {e}")
 
 with app.app_context():
     User.__table__.create(db.engine, checkfirst=True)
     ActivityLog.__table__.create(db.engine, checkfirst=True)
+    BillingTemplate.__table__.create(db.engine, checkfirst=True)
+    BillingTemplateItem.__table__.create(db.engine, checkfirst=True)
     db.create_all()
     _run_migrations()
 
     if User.query.count() == 0:
-        default_admin = User(username='admin', password=generate_password_hash('password123'), role='admin')
+        # אבטחה: יצירת סיסמה אקראית למנהל הדיפולטיבי במקום סיסמה קשיחה
+        temp_pass = secrets.token_hex(4)
+        default_admin = User(username='admin', password=generate_password_hash(temp_pass), role='admin')
         db.session.add(default_admin)
         db.session.commit()
-        print("DEBUG: נוצר משתמש מנהל ראשוני (admin / password123)")
+        print("\n" + "="*50)
+        print(f"SECURITY NOTICE: Initial admin user created.")
+        print(f"Username: admin | Password: {temp_pass}")
+        print("="*50 + "\n")
 
 def log_activity(action, details):
     try:
         current_user = session.get('username', 'מערכת')
         new_log = ActivityLog(action=action, details=details, username=current_user)
         db.session.add(new_log)
+        
+        # מניעת Log Bloat: ניקוי רשומות ישנות מעבר ל-1000
+        log_count = ActivityLog.query.count()
+        if log_count > 1000:
+            old_logs = ActivityLog.query.order_by(ActivityLog.timestamp.asc()).limit(log_count - 1000)
+            for log in old_logs:
+                db.session.delete(log)
+                
         db.session.commit()
-    except Exception:
+    except Exception as e:
+        print(f"Log Error: {e}")
         db.session.rollback()
 
 # ---------------------------------------------------------
-# הרשאות
+# הרשאות ואבטחה (CSRF)
 # ---------------------------------------------------------
 @app.before_request
 def require_login():
     allowed_routes = ['login', 'static']
-    if request.endpoint not in allowed_routes and not session.get('logged_in'):
+    if request.endpoint not in allowed_routes:
         if request.path.startswith('/api/'):
-            return jsonify({"error": "Unauthorized"}), 401
-        return redirect(url_for('login'))
+            # הגנת CSRF - מניעת בקשות משנות מצב (POST/PUT/DELETE) ממקורות זרים
+            if request.method in ['POST', 'PUT', 'DELETE']:
+                if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+                    return jsonify({"error": "CSRF verification failed"}), 403
+            
+            if not session.get('logged_in'):
+                return jsonify({"error": "Unauthorized"}), 401
+        elif not session.get('logged_in'):
+            return redirect(url_for('login'))
 
 def get_current_role():
     return session.get('role', 'viewer')
@@ -167,7 +199,7 @@ def get_products():
         products = Product.query.all()
         return jsonify({p.name: p.price for p in products})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "שגיאת מסד נתונים"}), 500
 
 @app.route('/api/products', methods=['POST'])
 def add_product():
@@ -197,7 +229,7 @@ def add_product():
         return jsonify({"success": True})
     except SQLAlchemyError as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/products/<path:name>', methods=['PUT'])
 def update_product(name):
@@ -236,9 +268,9 @@ def update_product(name):
 
         db.session.commit()
         return jsonify({"success": True})
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/products/<path:name>', methods=['DELETE'])
 def delete_product(name):
@@ -250,9 +282,9 @@ def delete_product(name):
             db.session.commit()
             log_activity('DELETE_PRODUCT', f"מחיקת מוצר: {name}")
         return jsonify({"success": True})
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/entries/<date>', methods=['GET'])
 def get_entries(date):
@@ -262,8 +294,8 @@ def get_entries(date):
             'id': e.id, 'product_name': e.product_name, 'quantity': e.quantity,
             'is_extra': e.is_extra, 'unit_price': e.unit_price
         } for e in entries])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/entries', methods=['POST'])
 def add_entry():
@@ -283,9 +315,10 @@ def add_entry():
 
         entry = DailyEntry.query.filter_by(date=date, product_name=product_name, is_extra=is_extra).first()
         if entry:
-            entry.quantity += quantity
+            # מניעת תנאי תחרות (Race Condition) - עדכון אטומי של הכמות
+            entry.quantity = DailyEntry.quantity + quantity
             entry.unit_price = current_price
-            log_activity('UPDATE_ENTRY', f"עדכון כמות: {quantity} ל-{product_name} בתאריך {date}")
+            log_activity('UPDATE_ENTRY', f"עדכון כמות (+{quantity}) ל-{product_name} בתאריך {date}")
         else:
             entry = DailyEntry(date=date, product_name=product_name, quantity=quantity,
                                 is_extra=is_extra, unit_price=current_price)
@@ -297,7 +330,7 @@ def add_entry():
         return jsonify({"success": False, "error": "נתונים חסרים או לא תקינים"}), 400
     except SQLAlchemyError as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/entries/<int:entry_id>', methods=['PUT'])
 def update_entry(entry_id):
@@ -316,14 +349,14 @@ def update_entry(entry_id):
         if 'is_extra' in data:
             entry.is_extra = bool(data['is_extra'])
 
-        log_activity('EDIT_ENTRY', f"עריכת חיוב: {entry.quantity} x {entry.product_name} בתאריך {entry.date}")
+        log_activity('EDIT_ENTRY', f"עריכת חיוב: כמות {entry.quantity} x {entry.product_name} בתאריך {entry.date}")
         db.session.commit()
         return jsonify({"success": True})
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "נתונים לא תקינים"}), 400
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
 def delete_entry(entry_id):
@@ -335,11 +368,10 @@ def delete_entry(entry_id):
             db.session.delete(entry)
             db.session.commit()
         return jsonify({"success": True})
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
-# נתיב למחיקה גורפת (למניעת בעיית N+1 ב-Frontend)
 @app.route('/api/bulk/entries/<date>', methods=['DELETE'])
 def clear_date_entries(date):
     if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות מחיקה"}), 403
@@ -348,9 +380,21 @@ def clear_date_entries(date):
         log_activity('CLEAR_DAY', f"ניקוי יום מלא מתאריך {date} ({deleted_count} חיובים הוסרו)")
         db.session.commit()
         return jsonify({"success": True})
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+
+@app.route('/api/bulk/season', methods=['DELETE'])
+def reset_season():
+    if not is_admin(): return jsonify({"success": False, "error": "הרשאת מנהל נדרשת לפעולה זו"}), 403
+    try:
+        count = DailyEntry.query.delete()
+        log_activity('SEASON_RESET', f"איפוס עונה מלא ({count} חיובים נמחקו מהמערכת)")
+        db.session.commit()
+        return jsonify({"success": True, "deleted": count})
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/report/month/<year_month>', methods=['GET'])
 def get_monthly_report(year_month):
@@ -360,8 +404,68 @@ def get_monthly_report(year_month):
             'id': e.id, 'date': e.date, 'product_name': e.product_name, 'quantity': e.quantity,
             'is_extra': e.is_extra, 'unit_price': e.unit_price
         } for e in entries])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
+
+# ---------------------------------------------------------
+# API של תבניות שרת (מניעת אובדן נתונים בין מכשירים)
+# ---------------------------------------------------------
+@app.route('/api/templates', methods=['GET'])
+def get_templates():
+    try:
+        templates = BillingTemplate.query.all()
+        result = {}
+        for t in templates:
+            result[t.name] = [{'product_name': i.product_name, 'quantity': i.quantity, 'is_extra': i.is_extra} for i in t.items]
+        return jsonify(result)
+    except Exception:
+        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
+
+@app.route('/api/templates', methods=['POST'])
+def save_template():
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות עריכה"}), 403
+    data = request.json or {}
+    name = data.get('name')
+    items = data.get('items', [])
+    if not name or not items:
+        return jsonify({"success": False, "error": "נתונים חסרים"}), 400
+    
+    try:
+        existing = BillingTemplate.query.filter_by(name=name).first()
+        if existing:
+            db.session.delete(existing)
+            
+        new_template = BillingTemplate(name=name)
+        db.session.add(new_template)
+        for item in items:
+            new_item = BillingTemplateItem(
+                template=new_template, 
+                product_name=item['product_name'], 
+                quantity=item['quantity'], 
+                is_extra=item.get('is_extra', False)
+            )
+            db.session.add(new_item)
+        
+        log_activity('SAVE_TEMPLATE', f"שמירת תבנית עבודה חדשה: {name}")
+        db.session.commit()
+        return jsonify({"success": True})
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
+
+@app.route('/api/templates/<path:name>', methods=['DELETE'])
+def delete_template(name):
+    if is_viewer(): return jsonify({"success": False, "error": "אין הרשאות"}), 403
+    try:
+        template = BillingTemplate.query.filter_by(name=name).first()
+        if template:
+            db.session.delete(template)
+            log_activity('DELETE_TEMPLATE', f"מחיקת תבנית עבודה: {name}")
+            db.session.commit()
+        return jsonify({"success": True})
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
 # ---------------------------------------------------------
 # API של מנהלים (משתמשים ולוגים)
@@ -372,8 +476,8 @@ def get_logs():
     try:
         logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(200).all()
         return jsonify([{'time': l.timestamp.strftime('%d/%m/%Y %H:%M'), 'user': l.username, 'action': l.action, 'details': l.details} for l in logs])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
@@ -381,8 +485,8 @@ def get_users():
     try:
         users = User.query.all()
         return jsonify([{'id': u.id, 'username': u.username, 'role': u.role} for u in users])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/users', methods=['POST'])
 def create_or_update_user():
@@ -408,9 +512,9 @@ def create_or_update_user():
             log_activity('CREATE_USER', f"משתמש חדש: {username} ({role})")
         db.session.commit()
         return jsonify({"success": True})
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
 def delete_user(user_id):
@@ -424,9 +528,9 @@ def delete_user(user_id):
             db.session.delete(user)
             db.session.commit()
         return jsonify({"success": True})
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/backup', methods=['GET'])
 def backup_data():
@@ -436,8 +540,8 @@ def backup_data():
         entries = [{'date': e.date, 'product_name': e.product_name, 'quantity': e.quantity,
                     'is_extra': e.is_extra, 'unit_price': e.unit_price} for e in DailyEntry.query.all()]
         return jsonify({"products": products, "entries": entries, "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        return jsonify({"error": "שגיאת מסד נתונים פנימית"}), 500
 
 @app.route('/api/current_user', methods=['GET'])
 def get_current_user_info():
