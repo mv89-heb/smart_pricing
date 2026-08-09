@@ -332,7 +332,7 @@
             </div>
             <div class="p-6">
                 <button onclick="saveCurrentDayAsTemplate()" class="w-full bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 py-3 rounded-xl font-bold mb-6 flex justify-center items-center gap-2 transition-colors">
-                    <i class="fa-solid fa-floppy-disk"></i> שמור את היום הנוכחי כתבנית
+                    <i class="fa-solid fa-floppy-disk"></i> שמור את היום הנוכחי כתבנית בשרת
                 </button>
                 <h4 class="text-sm font-bold text-slate-500 mb-3 border-b pb-2">תבניות שמורות:</h4>
                 <div id="templates-list" class="space-y-2 max-h-48 overflow-y-auto"></div>
@@ -410,7 +410,7 @@
                     </button>
                 </div>
                 <button id="end-season-btn" onclick="endOfSeasonReset()" class="w-full flex justify-center items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 py-3 rounded-xl font-bold transition-colors mt-2">
-                    <i class="fa-solid fa-power-off"></i> סגירת תקופה ואיפוס מערכת לחלוטין (מחיקת כל החיובים)
+                    <i class="fa-solid fa-power-off"></i> סגירת תקופה ואיפוס מערכת לחלוטין (מחיקת כל החיובים אי פעם)
                 </button>
             </div>
         </div>
@@ -468,6 +468,7 @@
 
     <script>
         let products = {};
+        let serverTemplates = {};
         let ts; 
         let dashboardChartInstance = null; 
         let topProductsChartInstance = null;
@@ -483,7 +484,6 @@
         const savedBudget = localStorage.getItem('monthly_budget');
         if (savedBudget) document.getElementById('budget-input').value = savedBudget;
 
-        // תיקון מצבי ריק וסימון הוק (Search)
         document.addEventListener('keydown', (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 e.preventDefault();
@@ -497,7 +497,7 @@
             }
         });
 
-        // פונקציית דיאלוג מותאם אישית (החלפת חלונות Prompt)
+        // פונקציית דיאלוג מותאם אישית (ללא חסימת דפדפן)
         function customPrompt(message, defaultValue = '', type = 'text') {
             return new Promise((resolve) => {
                 const overlay = document.createElement('div');
@@ -521,10 +521,13 @@
             });
         }
 
-        // מבטיח מחיקה במקרה של עזיבת העמוד
         window.addEventListener('beforeunload', () => {
             Object.keys(pendingDeletions).forEach(id => {
-                fetch(`/api/entries/${id}`, { method: 'DELETE', keepalive: true });
+                fetch(`/api/entries/${id}`, { 
+                    method: 'DELETE', 
+                    headers: {'X-Requested-With': 'XMLHttpRequest'},
+                    keepalive: true 
+                });
             });
         });
 
@@ -539,11 +542,24 @@
 
         async function apiFetch(url, options = {}) {
             try {
+                options.headers = options.headers || {};
+                
+                // הגנת CSRF לכל הבקשות שמשנות מידע
+                if (options.method && ['POST', 'PUT', 'DELETE'].includes(options.method.toUpperCase())) {
+                    options.headers['X-Requested-With'] = 'XMLHttpRequest';
+                }
+
                 const res = await fetch(url, options);
-                if (res.status === 401) { window.location.href = '/login'; return null; }
+                
+                if (res.status === 401) { 
+                    showToast('פג תוקף החיבור שלך לשרת. נא להתחבר מחדש.', 'error');
+                    setTimeout(() => { window.location.href = '/login'; }, 2000);
+                    return null; 
+                }
                 return res;
             } catch (err) {
-                showToast('שגיאת תקשורת', 'error'); return null;
+                showToast('שגיאת תקשורת עם השרת', 'error'); 
+                return null;
             }
         }
 
@@ -894,8 +910,15 @@
             if(t) { t.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => t.remove(), 300); }
         }
 
-        function openTemplatesModal() {
-            renderTemplatesList();
+        async function loadServerTemplates() {
+            const res = await apiFetch('/api/templates');
+            if (res && res.ok) {
+                serverTemplates = await res.json();
+            }
+        }
+
+        async function openTemplatesModal() {
+            await renderTemplatesList();
             const modal = document.getElementById('templates-modal');
             const content = document.getElementById('templates-content');
             modal.classList.remove('hidden');
@@ -910,18 +933,18 @@
             setTimeout(() => modal.classList.add('hidden'), 300);
         }
 
-        function renderTemplatesList() {
+        async function renderTemplatesList() {
+            await loadServerTemplates();
             const list = document.getElementById('templates-list');
-            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
             list.innerHTML = '';
             
-            if(Object.keys(templates).length === 0) {
-                list.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">אין תבניות שמורות עדיין.</p>';
+            if(Object.keys(serverTemplates).length === 0) {
+                list.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">אין תבניות שמורות בשרת עדיין.</p>';
                 return;
             }
 
-            Object.keys(templates).forEach(name => {
-                const itemsCount = templates[name].length;
+            Object.keys(serverTemplates).forEach(name => {
+                const itemsCount = serverTemplates[name].length;
                 
                 const deleteActionHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-template-btn text-red-400 hover:text-red-600 px-2 transition-colors" data-name="${escapeAttr(name)}"><i class="fa-solid fa-trash"></i></button>`;
                 const loadBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="load-template-btn bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-xs font-bold transition-colors" data-name="${escapeAttr(name)}">טען סל</button>`;
@@ -953,23 +976,31 @@
             const name = await customPrompt('הזן שם לתבנית החדשה:');
             if (!name) return;
 
-            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            await loadServerTemplates();
             
-            if (templates[name]) {
-                if(!confirm(`התבנית "${name}" כבר קיימת. האם אתה בטוח שברצונך לדרוס אותה?`)) return;
+            if (serverTemplates[name]) {
+                if(!confirm(`התבנית "${name}" כבר קיימת בשרת. האם אתה בטוח שברצונך לדרוס אותה?`)) return;
             }
 
-            templates[name] = window.currentDayEntries.map(e => ({ product_name: e.product_name, quantity: e.quantity, is_extra: e.is_extra }));
-            localStorage.setItem('billing_templates', JSON.stringify(templates));
+            const items = window.currentDayEntries.map(e => ({ product_name: e.product_name, quantity: e.quantity, is_extra: e.is_extra }));
             
-            showToast('התבנית נשמרה בהצלחה!');
-            renderTemplatesList();
+            const res = await apiFetch('/api/templates', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name: name, items: items })
+            });
+            
+            if (res && res.ok) {
+                showToast('התבנית נשמרה בשרת בהצלחה!');
+                renderTemplatesList();
+            } else {
+                showToast('שגיאה בשמירת התבנית בשרת', 'error');
+            }
         }
 
         async function loadTemplate(name) {
-            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
-            const items = templates[name];
-            if (!items) return;
+            if (!serverTemplates[name]) return;
+            const items = serverTemplates[name];
 
             const date = document.getElementById('current-date').value;
             if(!confirm(`האם לטעון את תבנית "${name}" לתאריך הנוכחי?`)) return;
@@ -987,12 +1018,14 @@
             closeTemplatesModal();
         }
 
-        function deleteTemplate(name) {
-            if(!confirm(`למחוק את התבנית "${name}"?`)) return;
-            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
-            delete templates[name];
-            localStorage.setItem('billing_templates', JSON.stringify(templates));
-            renderTemplatesList();
+        async function deleteTemplate(name) {
+            if(!confirm(`למחוק את התבנית "${name}" מהשרת?`)) return;
+            const res = await apiFetch(`/api/templates/${encodeURIComponent(name)}`, { method: 'DELETE' });
+            if (res && res.ok) {
+                renderTemplatesList();
+            } else {
+                showToast('שגיאה במחיקת התבנית', 'error');
+            }
         }
 
         function toggleFocusMode() {
@@ -1093,6 +1126,8 @@
             if(res && res.ok) {
                 showToast('היום נוקה בהצלחה!');
                 loadEntriesForDate();
+            } else {
+                showToast('שגיאה בניקוי היום', 'error');
             }
         }
 
@@ -1129,6 +1164,9 @@
                 
                 showToast('החיוב התווסף בהצלחה!');
                 loadEntriesForDate();
+            } else {
+                const data = await res.json().catch(() => ({}));
+                showToast(data.error || 'שגיאה בהוספת החיוב', 'error');
             }
         });
 
@@ -1317,30 +1355,37 @@
         }
 
         async function endOfSeasonReset() {
-            if(!confirm("⚠️ אזהרה קריטית!\nפעולה זו תסגור את התקופה הנוכחית ותנקה את כל החיובים.\nהאם אתה בטוח?")) return;
-            showToast('אוסף נתונים לסגירת תקופה...', 'success');
-            const currentYear = new Date().getFullYear();
-            const years = [currentYear - 1, currentYear, currentYear + 1]; 
-            let allEntries = [];
+            if (currentUserRole !== 'admin') return showToast('רק משתמש ברמת מנהל (Admin) מורשה לאפס מערכת', 'error');
+            if(!confirm("⚠️ אזהרה קריטית!\nפעולה זו תסגור את התקופה הנוכחית ותנקה את כל החיובים אי פעם מהמסד.\nהאם אתה בטוח לחלוטין?")) return;
+            
+            const btn = document.getElementById('end-season-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> מגבה נתונים למחשב לפני מחיקה...';
 
-            for (const year of years) {
-                for (let month = 1; month <= 12; month++) {
-                    const monthStr = `${year}-${month.toString().padStart(2, '0')}`;
-                    const res = await apiFetch(`/api/report/month/${monthStr}`);
-                    if (res && res.ok) allEntries = allEntries.concat(await res.json());
+            const backupRes = await apiFetch('/api/backup');
+            if (backupRes && backupRes.ok) {
+                const data = await backupRes.json();
+                if(data.entries.length > 0) {
+                    exportToExcelFull(data.entries, "דוח_גיבוי_אחרון_לפני_איפוס");
                 }
+                
+                showToast('מתחיל באיפוס שרת הנתונים...', 'success');
+                const res = await apiFetch('/api/bulk/season', { method: 'DELETE' });
+                
+                if (res && res.ok) {
+                    localStorage.removeItem('monthly_budget');
+                    showToast('המערכת אופסה בהצלחה לחלוטין!');
+                    closeDashboard();
+                    loadEntriesForDate(); 
+                } else {
+                    showToast('שגיאה באיפוס העונה', 'error');
+                }
+            } else {
+                showToast('שגיאה בהורדת הגיבוי טרם מחיקה. הפעולה בוטלה למען בטיחות המידע.', 'error');
             }
-
-            if (allEntries.length === 0) return showToast('לא נמצאו חיובים במערכת.', 'error');
-
-            exportToExcelFull(allEntries, "דוח_סגירת_תקופה_מלא");
-            for (const entry of allEntries) {
-                await apiFetch(`/api/entries/${entry.id}`, { method: 'DELETE' });
-            }
-            localStorage.removeItem('monthly_budget');
-            showToast('המערכת אופסה בהצלחה!');
-            closeDashboard();
-            loadEntriesForDate(); 
+            
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-power-off"></i> סגירת תקופה ואיפוס מערכת לחלוטין';
         }
 
         window.onafterprint = function() { document.body.classList.remove('invoice-mode'); }
@@ -1502,7 +1547,6 @@
                 const data = await res.json();
                 const backupObject = {
                     server_data: data,
-                    local_templates: JSON.parse(localStorage.getItem('billing_templates') || '{}'),
                     backup_date: new Date().toLocaleDateString('he-IL')
                 };
                 const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObject, null, 2));
