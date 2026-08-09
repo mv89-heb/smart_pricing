@@ -239,6 +239,7 @@
         </main>
     </div>
 
+    <!-- Modals -->
     <div id="admin-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
         <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="admin-content">
             <div class="bg-slate-800 p-4 flex justify-between items-center text-white shrink-0">
@@ -252,7 +253,6 @@
             </div>
 
             <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
-                
                 <div id="admin-tab-logs" class="space-y-6">
                     <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div>
@@ -320,7 +320,6 @@
                         </table>
                     </div>
                 </div>
-
             </div>
         </div>
     </div>
@@ -344,7 +343,10 @@
     <div id="dashboard-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
         <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="dashboard-content">
             <div class="bg-slate-800 p-5 flex justify-between items-center text-white shrink-0">
-                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-chart-pie text-primary-400"></i> אנליטיקה ודאשבורד לתקופה - <span id="dash-month-title"></span></h3>
+                <h3 class="text-lg font-bold flex items-center gap-2">
+                    <i class="fa-solid fa-chart-pie text-primary-400"></i> אנליטיקה ודאשבורד - 
+                    <input type="month" id="dashboard-month-picker" onchange="openDashboard(true)" class="ml-2 px-2 py-1 bg-slate-700 text-white border border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 text-sm cursor-pointer">
+                </h3>
                 <button onclick="closeDashboard()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
@@ -414,6 +416,7 @@
         </div>
     </div>
 
+    <!-- Invoice Template -->
     <div class="invoice-template p-10 max-w-2xl mx-auto">
         <div class="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-8">
             <div>
@@ -471,7 +474,7 @@
         let categoryChartInstance = null;
         let currentGrandTotal = 0; 
         let pendingDeletions = {}; 
-        let currentUserRole = 'viewer'; // תפקיד המשתמש הנוכחי
+        let currentUserRole = 'viewer';
 
         const today = new Date();
         const dateStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
@@ -480,6 +483,7 @@
         const savedBudget = localStorage.getItem('monthly_budget');
         if (savedBudget) document.getElementById('budget-input').value = savedBudget;
 
+        // תיקון מצבי ריק וסימון הוק (Search)
         document.addEventListener('keydown', (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 e.preventDefault();
@@ -487,20 +491,49 @@
             }
             if (e.key === '/' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
                 e.preventDefault();
-                document.getElementById('live-search').focus();
+                const searchInput = document.getElementById('live-search');
+                searchInput.focus();
+                searchInput.select(); 
             }
+        });
+
+        // פונקציית דיאלוג מותאם אישית (החלפת חלונות Prompt)
+        function customPrompt(message, defaultValue = '', type = 'text') {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 toast-enter';
+                overlay.innerHTML = `
+                    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-5 border border-slate-200">
+                        <h4 class="font-bold text-slate-800 mb-3">${message}</h4>
+                        <input type="${type}" id="prompt-input" value="${defaultValue}" class="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500 mb-5" onkeydown="if(event.key === 'Enter') document.getElementById('prompt-ok').click()">
+                        <div class="flex justify-end gap-3">
+                            <button id="prompt-cancel" class="px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">ביטול</button>
+                            <button id="prompt-ok" class="px-4 py-2 text-sm font-bold text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors">אישור</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+                const input = overlay.querySelector('#prompt-input');
+                input.focus(); input.select();
+                
+                overlay.querySelector('#prompt-ok').onclick = () => { resolve(input.value); overlay.remove(); };
+                overlay.querySelector('#prompt-cancel').onclick = () => { resolve(null); overlay.remove(); };
+            });
+        }
+
+        // מבטיח מחיקה במקרה של עזיבת העמוד
+        window.addEventListener('beforeunload', () => {
+            Object.keys(pendingDeletions).forEach(id => {
+                fetch(`/api/entries/${id}`, { method: 'DELETE', keepalive: true });
+            });
         });
 
         function formatMoney(amount) {
             return amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
-        // כלים בטוחים להזרקת טקסט/מאפיינים ל-HTML, כדי שמוצרים/שמות עם גרש, מרכאות
-        // או תווים מיוחדים לא ישברו כפתורים (זו הייתה סיבת "כפתורים שלא עובדים")
         function escapeHtml(str) {
-            return String(str)
-                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
         function escapeAttr(str) { return escapeHtml(str); }
 
@@ -530,7 +563,6 @@
             }, 3000);
         }
 
-        // פיצ'ר חדש: בדיקה והתאמת הממשק בהתאם להרשאות המשתמש המחובר
         async function checkUserSession() {
             const res = await apiFetch('/api/current_user');
             if (res && res.ok) {
@@ -538,12 +570,10 @@
                 currentUserRole = info.role;
                 document.getElementById('user-badge').textContent = `${info.username} (${translateRole(info.role)})`;
                 
-                // התאמת חשיפת אלמנטים
                 if (info.role === 'admin') {
                     document.getElementById('admin-panel-btn').classList.remove('hidden');
                 }
                 if (info.role === 'viewer') {
-                    // לצופה נעלים לחלוטין את טופסי ההוספה ואת כפתורי המחיקה/איפוס הגורפים
                     document.getElementById('product-form').classList.add('hidden');
                     document.getElementById('entry-form-container').classList.add('hidden');
                     document.getElementById('clear-day-btn').classList.add('hidden');
@@ -560,7 +590,7 @@
         }
 
         async function loadProducts() {
-            await checkUserSession(); // בודק הרשאות לפני טעינה
+            await checkUserSession(); 
             const res = await apiFetch('/api/products');
             if (!res) return;
             products = await res.json();
@@ -588,7 +618,6 @@
                     trendHtml = '<i class="fa-solid fa-arrow-trend-down text-green-500 mr-2 text-[10px]" title="המחיר הוזל"></i>';
                 }
 
-                // הסתרת כפתורי עריכה/מחיקה לצופים (data-attributes כדי לא לשבור על שמות עם גרש/מרכאות)
                 const editBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="edit-product-btn text-indigo-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity" data-name="${escapeAttr(name)}" title="עריכת מוצר"><i class="fa-solid fa-pen"></i></button>`;
                 const deleteBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-product-btn text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" data-name="${escapeAttr(name)}" title="מחיקת מוצר"><i class="fa-solid fa-trash-can"></i></button>`;
 
@@ -627,7 +656,7 @@
         }
 
         function updateQuickAddChips() {
-            if (currentUserRole === 'viewer') return; // לא מציגים צ'יפים לצופה
+            if (currentUserRole === 'viewer') return; 
             const freq = JSON.parse(localStorage.getItem('prod_freq') || '{}');
             const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5);
             const container = document.getElementById('quick-add-chips');
@@ -656,7 +685,7 @@
 
         async function bulkUpdatePrices() {
             if (Object.keys(products).length === 0) return showToast('המחירון ריק.', 'error');
-            const percentStr = prompt('הזן אחוז לעדכון גורף של כל המחירון (לדוגמה: 5, -5):');
+            const percentStr = await customPrompt('הזן אחוז לעדכון גורף של כל המחירון (לדוגמה: 5, -5):', '', 'number');
             if (!percentStr) return; 
             const percent = parseFloat(percentStr);
             if (isNaN(percent)) return showToast('נא להזין מספר תקין', 'error');
@@ -742,8 +771,6 @@
             }
         }
 
-        // מאזין אירועים אחד לכל הטבלה (event delegation) - עמיד לשמות מוצרים עם
-        // גרשיים/מרכאות/תווים מיוחדים, בניגוד ל-onclick עם שרשור מחרוזות
         document.getElementById('price-list-table-body').addEventListener('click', (e) => {
             const editBtn = e.target.closest('.edit-product-btn');
             if (editBtn) { editProduct(editBtn.dataset.name); return; }
@@ -767,11 +794,15 @@
             window.currentDayEntries = entries; 
             const tbody = document.getElementById('entries-table-body');
             tbody.innerHTML = '';
-            let total = 0;
+            
+            if (entries.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-10 text-center text-slate-500 font-medium bg-slate-50/50"><i class="fa-solid fa-box-open text-2xl mb-2 text-slate-300 block"></i> לא נמצאו חיובים ליום זה</td></tr>`;
+                document.getElementById('daily-total').textContent = '0.00';
+                return;
+            }
 
+            let total = 0;
             entries.forEach(entry => {
-                // מחיר קפוא מזמן ההזנה (unit_price) עדיף על המחיר העדכני במחירון,
-                // כדי שדוחות ישנים לא ישתנו אם המוצר נמחק/עודכן במחירון אחר-כך
                 const price = (entry.unit_price !== undefined && entry.unit_price !== null) ? entry.unit_price : (products[entry.product_name] || 0);
                 const itemTotal = price * entry.quantity;
                 total += itemTotal;
@@ -804,7 +835,7 @@
         });
 
         async function editEntryQuantity(entryId, currentQty) {
-            const input = prompt('הזן כמות חדשה:', currentQty);
+            const input = await customPrompt('הזן כמות חדשה:', currentQty, 'text');
             if (input === null) return;
             const newQty = parseFloat(input);
             if (isNaN(newQty) || newQty <= 0) return showToast('כמות לא תקינה', 'error');
@@ -892,7 +923,6 @@
             Object.keys(templates).forEach(name => {
                 const itemsCount = templates[name].length;
                 
-                // הסתרת כפתור מחיקת תבנית לצופים (data-attributes כדי לא לשבור על שמות עם גרש)
                 const deleteActionHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-template-btn text-red-400 hover:text-red-600 px-2 transition-colors" data-name="${escapeAttr(name)}"><i class="fa-solid fa-trash"></i></button>`;
                 const loadBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="load-template-btn bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-xs font-bold transition-colors" data-name="${escapeAttr(name)}">טען סל</button>`;
 
@@ -919,10 +949,16 @@
 
         async function saveCurrentDayAsTemplate() {
             if (!window.currentDayEntries || window.currentDayEntries.length === 0) return showToast('אין חיובים לשמור ביום זה', 'error');
-            const name = prompt('הזן שם לתבנית החדשה:');
+            
+            const name = await customPrompt('הזן שם לתבנית החדשה:');
             if (!name) return;
 
             const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            
+            if (templates[name]) {
+                if(!confirm(`התבנית "${name}" כבר קיימת. האם אתה בטוח שברצונך לדרוס אותה?`)) return;
+            }
+
             templates[name] = window.currentDayEntries.map(e => ({ product_name: e.product_name, quantity: e.quantity, is_extra: e.is_extra }));
             localStorage.setItem('billing_templates', JSON.stringify(templates));
             
@@ -975,6 +1011,9 @@
 
         function getEvaluatedQuantity() {
             const qtyStr = document.getElementById('entry-qty').value;
+            if (!/^[\d\.\+\-\*\/\(\)\s]+$/.test(qtyStr)) {
+                return 0;
+            }
             try {
                 const qty = Function('"use strict";return (' + qtyStr + ')')();
                 if (isNaN(qty) || qty <= 0) return 0;
@@ -1048,12 +1087,13 @@
             if (!window.currentDayEntries || window.currentDayEntries.length === 0) return showToast('אין חיובים למחוק ביום זה', 'error');
             if(!confirm(`אזהרה! האם אתה בטוח שברצונך למחוק את כל ${window.currentDayEntries.length} החיובים ביום זה?`)) return;
             
-            showToast('מוחק נתונים...', 'success');
-            for (const entry of window.currentDayEntries) {
-                await apiFetch(`/api/entries/${entry.id}`, { method: 'DELETE' });
+            const date = document.getElementById('current-date').value;
+            const res = await apiFetch(`/api/bulk/entries/${date}`, { method: 'DELETE' });
+            
+            if(res && res.ok) {
+                showToast('היום נוקה בהצלחה!');
+                loadEntriesForDate();
             }
-            showToast('היום נוקה בהצלחה!');
-            loadEntriesForDate();
         }
 
         document.getElementById('entry-form').addEventListener('submit', async (e) => {
@@ -1092,14 +1132,6 @@
             }
         });
 
-        async function fetchMonthlyData() {
-            const dateVal = document.getElementById('current-date').value; 
-            if(!dateVal) return null;
-            const month = dateVal.substring(0, 7); 
-            const res = await apiFetch(`/api/report/month/${month}`);
-            return res ? { month, entries: await res.json() } : null;
-        }
-
         function updateBudgetProgress() {
             const budgetVal = document.getElementById('budget-input').value;
             localStorage.setItem('monthly_budget', budgetVal);
@@ -1124,9 +1156,23 @@
             else bar.className = 'bg-red-500 h-full transition-all duration-500';
         }
 
-        async function openDashboard() {
-            const data = await fetchMonthlyData();
-            if(!data || data.entries.length === 0) return showToast('אין נתונים להצגה בחודש זה', 'error');
+        async function openDashboard(fromPicker = false) {
+            let monthStr;
+            if (fromPicker) {
+                monthStr = document.getElementById('dashboard-month-picker').value;
+            } else {
+                const dateVal = document.getElementById('current-date').value;
+                monthStr = dateVal ? dateVal.substring(0, 7) : new Date().toISOString().substring(0, 7);
+                document.getElementById('dashboard-month-picker').value = monthStr;
+            }
+
+            const res = await apiFetch(`/api/report/month/${monthStr}`);
+            if (!res) return showToast('שגיאה בטעינת הנתונים', 'error');
+            
+            const entries = await res.json();
+            const data = { month: monthStr, entries: entries };
+
+            if(data.entries.length === 0) return showToast('אין נתונים להצגה בחודש זה', 'error');
 
             let regularTotal = 0; let extraTotal = 0;
             const productTotals = {}; 
@@ -1146,13 +1192,12 @@
 
             currentGrandTotal = regularTotal + extraTotal;
 
-            document.getElementById('dash-month-title').textContent = data.month;
             document.getElementById('dash-regular-total').textContent = formatMoney(regularTotal);
             document.getElementById('dash-extra-total').textContent = formatMoney(extraTotal);
             document.getElementById('dash-grand-total').textContent = formatMoney(currentGrandTotal);
 
-            const [yearStr, monthStr] = data.month.split('-');
-            const year = parseInt(yearStr), month = parseInt(monthStr);
+            const [yearStr, monthStrParsed] = data.month.split('-');
+            const year = parseInt(yearStr), month = parseInt(monthStrParsed);
             const daysInMonth = new Date(year, month, 0).getDate();
             const today = new Date();
             let daysPassed = daysInMonth;
@@ -1227,8 +1272,6 @@
             let regTotal = 0; let extTotal = 0;
 
             sorted.forEach(e => {
-                // שימוש במחיר הקפוא (unit_price) מזמן ההזנה כשקיים, כדי שהדוח לא יתעוות
-                // אם המחיר במחירון שונה מאז, או שהמוצר נמחק מהמחירון
                 const price = (e.unit_price !== undefined && e.unit_price !== null) ? e.unit_price : (products[e.product_name] || 0);
                 const total = price * e.quantity;
                 const row = [e.date, e.product_name, e.quantity, price, total];
@@ -1262,9 +1305,13 @@
         }
 
         async function exportMonthlyReport() {
-            const data = await fetchMonthlyData();
-            if(!data || data.entries.length === 0) return showToast('אין נתונים', 'error');
-            exportToExcelFull(data.entries, `דוח_חיובי_מכללה_${data.month}`);
+            const monthStr = document.getElementById('dashboard-month-picker').value;
+            const res = await apiFetch(`/api/report/month/${monthStr}`);
+            if(!res) return showToast('אין נתונים להורדה', 'error');
+            const entries = await res.json();
+
+            if(entries.length === 0) return showToast('אין נתונים', 'error');
+            exportToExcelFull(entries, `דוח_חיובי_מכללה_${monthStr}`);
             showToast('דוח ה-Excel הופק בהצלחה!');
             closeDashboard();
         }
@@ -1299,7 +1346,7 @@
         window.onafterprint = function() { document.body.classList.remove('invoice-mode'); }
 
         function generateFormalInvoice() {
-            const titleElement = document.getElementById('dash-month-title').textContent;
+            const titleElement = document.getElementById('dashboard-month-picker').value;
             const regTotal = document.getElementById('dash-regular-total').textContent;
             const extTotal = document.getElementById('dash-extra-total').textContent;
             const grandTotal = document.getElementById('dash-grand-total').textContent;
@@ -1314,7 +1361,6 @@
             setTimeout(() => { document.body.classList.add('invoice-mode'); window.print(); }, 350); 
         }
 
-        // --- סקריפטים חדשים ללשוניות המשתמשים (פעימה 4) ---
         async function openAdminPanel() {
             await loadActivityLogs();
             await loadUsersTable();
