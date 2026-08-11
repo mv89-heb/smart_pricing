@@ -34,8 +34,23 @@ def _install_indexes():
     )
     with app.app_context():
         for statement in statements:
-            try: db.session.execute(text(statement)); db.session.commit()
-            except Exception: db.session.rollback()
+            try:
+                db.session.execute(text(statement)); db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+        # Repair legacy rows whose cached total_amount was left at zero/stale.
+        # unit_price * quantity is the canonical value used by the application.
+        try:
+            db.session.execute(text("""
+                UPDATE daily_entry
+                SET total_amount = ROUND(COALESCE(quantity, 0) * COALESCE(unit_price, 0), 2)
+                WHERE total_amount IS NULL
+                   OR total_amount = 0
+            """))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
 def _fast_price_for_date(product, iso_date):
     row = (PriceHistory.query.filter(PriceHistory.product_id == product.id, PriceHistory.effective_from.isnot(None), PriceHistory.effective_from <= iso_date).order_by(PriceHistory.effective_from.desc(), PriceHistory.id.desc()).first())
@@ -52,25 +67,56 @@ def _fast_templates():
     templates = BillingTemplate.query.options(selectinload(BillingTemplate.items)).order_by(BillingTemplate.name.asc()).all()
     return app_module.jsonify({t.name: [{"product_name": i.product_name, "quantity": i.quantity, "is_extra": bool(i.is_extra)} for i in t.items] for t in templates})
 
+def _entry_value_expr():
+    """Return the canonical SQL amount expression for a DailyEntry."""
+    return func.coalesce(DailyEntry.quantity, 0) * func.coalesce(DailyEntry.unit_price, 0)
+
 def _fast_period_report():
     request = app_module.request; start=(request.args.get("from") or "").strip(); end=(request.args.get("to") or "").strip()
     if not app_module.valid_date(start) or not app_module.valid_date(end) or start>end: return app_module.jsonify({"error":"טווח תאריכים לא תקין"}),400
-    entries=DailyEntry.query.filter(DailyEntry.date>=start,DailyEntry.date<=end).order_by(DailyEntry.date.asc(),DailyEntry.id.asc()).all(); payload=app_module.build_report(entries,start,end); months=sorted({e.date[:7] for e in entries})
+    entries=DailyEntry.query.filter(DailyEntry.date>=start,DailyEntry.date<=end).order_by(DailyEntry.date.asc(),DailyEntry.id.asc()).all()
+
+    # Build the report from the same canonical calculation used by the dashboard,
+    # rather than trusting an old cached total_amount value.
+    regular = extra = 0.0
+    products = {}
+    days = {}
+    payload_entries = []
+    for e in entries:
+        amount = app_module.money(e.quantity) * app_module.money(e.unit_price)
+        amount = amount.quantize(app_module.Decimal("0.01")) if hasattr(app_module, "Decimal") else amount
+        amount_f = float(amount)
+        if e.is_extra: extra += amount_f
+        else: regular += amount_f
+        p = products.setdefault(e.product_name, {"quantity": 0.0, "total": 0.0})
+        p["quantity"] += float(e.quantity or 0); p["total"] += amount_f
+        d = days.setdefault(e.date, {"regular": 0.0, "extra": 0.0, "total": 0.0})
+        d["extra" if e.is_extra else "regular"] += amount_f; d["total"] += amount_f
+        payload_entries.append({"id": e.id, "date": e.date, "product_name": e.product_name, "quantity": e.quantity,
+                                "is_extra": bool(e.is_extra), "unit_price": float(e.unit_price or 0),
+                                "total_amount": amount_f, "note": e.note})
+    grand = regular + extra
+    payload = {"from": start, "to": end, "entries": payload_entries,
+               "summary": {"regular_total": regular, "extra_total": extra, "grand_total": grand,
+                           "days_count": len(days), "average_day": grand / len(days) if days else 0.0},
+               "product_summary": products, "day_summary": days}
+    months=sorted({e.date[:7] for e in entries})
     locked={row.year_month for row in PeriodLock.query.filter(PeriodLock.year_month.in_(months),PeriodLock.locked.is_(True)).all()} if months else set()
     payload["locked_months"]={m:m in locked for m in months}; payload["fully_locked"]=bool(months) and len(locked)==len(months)
     return app_module.jsonify(payload)
 
 def _aggregate_period(start,end,include_products=True,include_days=True):
     base=DailyEntry.query.filter(DailyEntry.date>=start,DailyEntry.date<=end)
-    regular_expr=case((DailyEntry.is_extra.is_(False),DailyEntry.total_amount),else_=0); extra_expr=case((DailyEntry.is_extra.is_(True),DailyEntry.total_amount),else_=0)
-    grand,regular,extra,days_count,quantity=base.with_entities(func.coalesce(func.sum(DailyEntry.total_amount),0),func.coalesce(func.sum(regular_expr),0),func.coalesce(func.sum(extra_expr),0),func.count(func.distinct(DailyEntry.date)),func.coalesce(func.sum(DailyEntry.quantity),0)).first()
+    amount_expr = _entry_value_expr()
+    regular_expr=case((DailyEntry.is_extra.is_(False),amount_expr),else_=0); extra_expr=case((DailyEntry.is_extra.is_(True),amount_expr),else_=0)
+    grand,regular,extra,days_count,quantity=base.with_entities(func.coalesce(func.sum(amount_expr),0),func.coalesce(func.sum(regular_expr),0),func.coalesce(func.sum(extra_expr),0),func.count(func.distinct(DailyEntry.date)),func.coalesce(func.sum(DailyEntry.quantity),0)).first()
     grand=float(grand or 0); regular=float(regular or 0); extra=float(extra or 0); days_count=int(days_count or 0)
     payload={"from":start,"to":end,"summary":{"grand_total":grand,"regular_total":regular,"extra_total":extra,"days_count":days_count,"average_day":grand/days_count if days_count else 0.0,"quantity_total":float(quantity or 0)}}
     if include_days:
-        rows=base.with_entities(DailyEntry.date,func.coalesce(func.sum(case((DailyEntry.is_extra.is_(False),DailyEntry.total_amount),else_=0)),0),func.coalesce(func.sum(case((DailyEntry.is_extra.is_(True),DailyEntry.total_amount),else_=0)),0),func.coalesce(func.sum(DailyEntry.total_amount),0)).group_by(DailyEntry.date).order_by(DailyEntry.date.asc()).all()
+        rows=base.with_entities(DailyEntry.date,func.coalesce(func.sum(case((DailyEntry.is_extra.is_(False),amount_expr),else_=0)),0),func.coalesce(func.sum(case((DailyEntry.is_extra.is_(True),amount_expr),else_=0)),0),func.coalesce(func.sum(amount_expr),0)).group_by(DailyEntry.date).order_by(DailyEntry.date.asc()).all()
         payload["day_summary"]={d:{"regular":float(r or 0),"extra":float(x or 0),"total":float(t or 0)} for d,r,x,t in rows}
     if include_products:
-        rows=base.with_entities(DailyEntry.product_name,func.coalesce(func.sum(DailyEntry.quantity),0),func.coalesce(func.sum(DailyEntry.total_amount),0)).group_by(DailyEntry.product_name).order_by(func.sum(DailyEntry.total_amount).desc()).all()
+        rows=base.with_entities(DailyEntry.product_name,func.coalesce(func.sum(DailyEntry.quantity),0),func.coalesce(func.sum(amount_expr),0)).group_by(DailyEntry.product_name).order_by(func.sum(amount_expr).desc()).all()
         payload["product_summary"]={n:{"quantity":float(q or 0),"total":float(t or 0)} for n,q,t in rows}
     months=sorted({m for m, in base.with_entities(func.substr(DailyEntry.date,1,7)).distinct().all()})
     locked={row.year_month for row in PeriodLock.query.filter(PeriodLock.year_month.in_(months),PeriodLock.locked.is_(True)).all()} if months else set()
@@ -88,10 +134,9 @@ def _dashboard_compare():
         start=(request.args.get(prefix+"_from") or "").strip(); end=(request.args.get(prefix+"_to") or "").strip()
         if not app_module.valid_date(start) or not app_module.valid_date(end) or start>end:return app_module.jsonify({"error":"טווח השוואה לא תקין"}),400
         ranges.append((start,end))
-    current=_aggregate_period(*ranges[0],include_products=False,include_days=False)["summary"]
-    previous=_aggregate_period(*ranges[1],include_products=False,include_days=False)["summary"]
+    a=_aggregate_period(*ranges[0],include_products=False,include_days=False)["summary"]; b=_aggregate_period(*ranges[1],include_products=False,include_days=False)["summary"]
     def pct(old,new): return None if old==0 else round((new-old)/old*100,2)
-    return app_module.jsonify({"a":current,"b":previous,"change":{"grand_total":pct(previous["grand_total"],current["grand_total"]),"regular_total":pct(previous["regular_total"],current["regular_total"]),"extra_total":pct(previous["extra_total"],current["extra_total"]),"days_count":pct(previous["days_count"],current["days_count"])}})
+    return app_module.jsonify({"a":a,"b":b,"change":{"grand_total":pct(a["grand_total"],b["grand_total"]),"regular_total":pct(a["regular_total"],b["regular_total"]),"extra_total":pct(a["extra_total"],b["extra_total"]),"days_count":pct(a["days_count"],b["days_count"])}})
 
 app_module.price_for_date=_fast_price_for_date
 app.view_functions["get_product_details"]=_fast_product_details
