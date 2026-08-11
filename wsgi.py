@@ -88,9 +88,10 @@ def _dashboard_compare():
         start=(request.args.get(prefix+"_from") or "").strip(); end=(request.args.get(prefix+"_to") or "").strip()
         if not app_module.valid_date(start) or not app_module.valid_date(end) or start>end:return app_module.jsonify({"error":"טווח השוואה לא תקין"}),400
         ranges.append((start,end))
-    a=_aggregate_period(*ranges[0],include_products=False,include_days=False)["summary"]; b=_aggregate_period(*ranges[1],include_products=False,include_days=False)["summary"]
+    current=_aggregate_period(*ranges[0],include_products=False,include_days=False)["summary"]
+    previous=_aggregate_period(*ranges[1],include_products=False,include_days=False)["summary"]
     def pct(old,new): return None if old==0 else round((new-old)/old*100,2)
-    return app_module.jsonify({"a":a,"b":b,"change":{"grand_total":pct(a["grand_total"],b["grand_total"]),"regular_total":pct(a["regular_total"],b["regular_total"]),"extra_total":pct(a["extra_total"],b["extra_total"]),"days_count":pct(a["days_count"],b["days_count"])}})
+    return app_module.jsonify({"a":current,"b":previous,"change":{"grand_total":pct(previous["grand_total"],current["grand_total"]),"regular_total":pct(previous["regular_total"],current["regular_total"]),"extra_total":pct(previous["extra_total"],current["extra_total"]),"days_count":pct(previous["days_count"],current["days_count"])}})
 
 app_module.price_for_date=_fast_price_for_date
 app.view_functions["get_product_details"]=_fast_product_details
