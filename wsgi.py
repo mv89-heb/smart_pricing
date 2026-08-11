@@ -1,31 +1,29 @@
 """Production entrypoint and performance layer for Smart Pricing.
 
-This module keeps the existing application architecture intact while adding
-safe runtime optimizations that do not change business rules.
+Keeps business rules in app.py while replacing only expensive read paths with
+query-efficient equivalents. The dashboard receives aggregates instead of
+shipping every historical billing row to the browser.
 """
-from functools import wraps
-
-from sqlalchemy import text
+from sqlalchemy import text, func, case
 from sqlalchemy.orm import selectinload
 
 import app as app_module
 
 app = app_module.app
-
 db = app_module.db
 Product = app_module.Product
 PriceHistory = app_module.PriceHistory
 DailyEntry = app_module.DailyEntry
 BillingTemplate = app_module.BillingTemplate
 PeriodLock = app_module.PeriodLock
-ActivityLog = app_module.ActivityLog
 
 
 def _install_indexes():
-    """Create the indexes used by the hottest application queries.
+    """Create indexes used by the hottest read/write paths.
 
-    IF NOT EXISTS makes this safe to run on every worker boot and preserves
-    compatibility with both PostgreSQL and SQLite.
+    IF NOT EXISTS keeps startup idempotent. These statements are intentionally
+    small and are safe for the PostgreSQL/SQLite deployments supported by the
+    application.
     """
     statements = (
         "CREATE INDEX IF NOT EXISTS ix_daily_entry_date_id ON daily_entry (date, id)",
@@ -45,12 +43,7 @@ def _install_indexes():
 
 
 def _fast_price_for_date(product, iso_date):
-    """Return the latest effective price with one indexed query.
-
-    The previous implementation loaded the complete price history for a
-    product into Python and filtered it there. That becomes increasingly
-    expensive as price history grows.
-    """
+    """Find the latest effective price with one indexed DB query."""
     row = (
         PriceHistory.query
         .filter(
@@ -65,17 +58,17 @@ def _fast_price_for_date(product, iso_date):
 
 
 def _fast_product_details():
-    """Load all products and their next scheduled price without N+1 queries."""
+    """Load products and next scheduled prices in two queries, not N+1."""
     today = app_module.today_iso()
     products = Product.query.order_by(Product.name.asc()).all()
     if not products:
         return app_module.jsonify([])
 
-    product_ids = [p.id for p in products]
+    ids = [p.id for p in products]
     scheduled = (
         PriceHistory.query
         .filter(
-            PriceHistory.product_id.in_(product_ids),
+            PriceHistory.product_id.in_(ids),
             PriceHistory.effective_from.isnot(None),
             PriceHistory.effective_from > today,
         )
@@ -86,14 +79,12 @@ def _fast_product_details():
     for row in scheduled:
         next_by_product.setdefault(row.product_id, row)
 
-    payload = []
-    for product in products:
-        row = next_by_product.get(product.id)
-        payload.append({
-            "id": product.id,
-            "name": product.name,
-            "price": float(product.price or 0),
-            "tag": product.tag or "",
+    return app_module.jsonify([
+        {
+            "id": p.id,
+            "name": p.name,
+            "price": float(p.price or 0),
+            "tag": p.tag or "",
             "scheduled_price": (
                 {
                     "id": row.id,
@@ -103,14 +94,15 @@ def _fast_product_details():
                     "changed_by": row.changed_by,
                     "scheduled": True,
                 }
-                if row else None
+                if (row := next_by_product.get(p.id)) else None
             ),
-        })
-    return app_module.jsonify(payload)
+        }
+        for p in products
+    ])
 
 
 def _fast_templates():
-    """Avoid one SQL query per template when reading template items."""
+    """Load templates and child rows with select-in loading."""
     templates = (
         BillingTemplate.query
         .options(selectinload(BillingTemplate.items))
@@ -118,20 +110,20 @@ def _fast_templates():
         .all()
     )
     return app_module.jsonify({
-        template.name: [
+        t.name: [
             {
-                "product_name": item.product_name,
-                "quantity": item.quantity,
-                "is_extra": bool(item.is_extra),
+                "product_name": i.product_name,
+                "quantity": i.quantity,
+                "is_extra": bool(i.is_extra),
             }
-            for item in template.items
+            for i in t.items
         ]
-        for template in templates
+        for t in templates
     })
 
 
 def _fast_period_report():
-    """Keep the report response identical while reducing lock queries from N+1 to 1."""
+    """Keep the full report contract while reducing lock lookup to one query."""
     request = app_module.request
     start = (request.args.get("from") or "").strip()
     end = (request.args.get("to") or "").strip()
@@ -145,25 +137,143 @@ def _fast_period_report():
         .all()
     )
     payload = app_module.build_report(entries, start, end)
-
-    months = sorted({entry.date[:7] for entry in entries})
-    locked_months = set()
+    months = sorted({e.date[:7] for e in entries})
+    locked = set()
     if months:
-        locked_months = {
+        locked = {
             row.year_month
             for row in PeriodLock.query
             .filter(PeriodLock.year_month.in_(months), PeriodLock.locked.is_(True))
             .all()
         }
-    payload["locked_months"] = {month: month in locked_months for month in months}
-    payload["fully_locked"] = bool(months) and len(locked_months) == len(months)
+    payload["locked_months"] = {m: m in locked for m in months}
+    payload["fully_locked"] = bool(months) and len(locked) == len(months)
     return app_module.jsonify(payload)
 
 
-# Patch only the hot functions. Business logic and URLs remain unchanged.
+def _aggregate_period(start, end, include_products=True, include_days=True):
+    """Return compact dashboard aggregates without loading DailyEntry rows."""
+    base = DailyEntry.query.filter(DailyEntry.date >= start, DailyEntry.date <= end)
+    regular_expr = case((DailyEntry.is_extra.is_(False), DailyEntry.total_amount), else_=0)
+    extra_expr = case((DailyEntry.is_extra.is_(True), DailyEntry.total_amount), else_=0)
+    summary_row = base.with_entities(
+        func.coalesce(func.sum(DailyEntry.total_amount), 0),
+        func.coalesce(func.sum(regular_expr), 0),
+        func.coalesce(func.sum(extra_expr), 0),
+        func.count(func.distinct(DailyEntry.date)),
+        func.coalesce(func.sum(DailyEntry.quantity), 0),
+    ).first()
+
+    grand, regular, extra, days_count, quantity = summary_row
+    grand = float(grand or 0)
+    regular = float(regular or 0)
+    extra = float(extra or 0)
+    days_count = int(days_count or 0)
+
+    payload = {
+        "from": start,
+        "to": end,
+        "summary": {
+            "grand_total": grand,
+            "regular_total": regular,
+            "extra_total": extra,
+            "days_count": days_count,
+            "average_day": grand / days_count if days_count else 0.0,
+            "quantity_total": float(quantity or 0),
+        },
+    }
+
+    if include_days:
+        day_rows = (
+            base.with_entities(
+                DailyEntry.date,
+                func.coalesce(func.sum(case((DailyEntry.is_extra.is_(False), DailyEntry.total_amount), else_=0)), 0),
+                func.coalesce(func.sum(case((DailyEntry.is_extra.is_(True), DailyEntry.total_amount), else_=0)), 0),
+                func.coalesce(func.sum(DailyEntry.total_amount), 0),
+            )
+            .group_by(DailyEntry.date)
+            .order_by(DailyEntry.date.asc())
+            .all()
+        )
+        payload["day_summary"] = {
+            date: {"regular": float(regular or 0), "extra": float(extra or 0), "total": float(total or 0)}
+            for date, regular, extra, total in day_rows
+        }
+
+    if include_products:
+        product_rows = (
+            base.with_entities(
+                DailyEntry.product_name,
+                func.coalesce(func.sum(DailyEntry.quantity), 0),
+                func.coalesce(func.sum(DailyEntry.total_amount), 0),
+            )
+            .group_by(DailyEntry.product_name)
+            .order_by(func.sum(DailyEntry.total_amount).desc())
+            .all()
+        )
+        payload["product_summary"] = {
+            name: {"quantity": float(qty or 0), "total": float(total or 0)}
+            for name, qty, total in product_rows
+        }
+
+    months = sorted({row[0][:7] for row in base.with_entities(DailyEntry.date).distinct().all()})
+    if months:
+        locked = {
+            row.year_month
+            for row in PeriodLock.query
+            .filter(PeriodLock.year_month.in_(months), PeriodLock.locked.is_(True))
+            .all()
+        }
+        payload["locked_months"] = {m: m in locked for m in months}
+        payload["fully_locked"] = len(locked) == len(months)
+    else:
+        payload["locked_months"] = {}
+        payload["fully_locked"] = False
+    return payload
+
+
+def _dashboard_summary():
+    request = app_module.request
+    start = (request.args.get("from") or "").strip()
+    end = (request.args.get("to") or "").strip()
+    if not app_module.valid_date(start) or not app_module.valid_date(end) or start > end:
+        return app_module.jsonify({"error": "טווח תאריכים לא תקין"}), 400
+    return app_module.jsonify(_aggregate_period(start, end))
+
+
+def _dashboard_compare():
+    request = app_module.request
+    ranges = []
+    for prefix in ("a", "b"):
+        start = (request.args.get(prefix + "_from") or "").strip()
+        end = (request.args.get(prefix + "_to") or "").strip()
+        if not app_module.valid_date(start) or not app_module.valid_date(end) or start > end:
+            return app_module.jsonify({"error": "טווח השוואה לא תקין"}), 400
+        ranges.append((start, end))
+
+    a = _aggregate_period(*ranges[0], include_products=False, include_days=False)
+    b = _aggregate_period(*ranges[1], include_products=False, include_days=False)
+
+    def pct(old, new):
+        return None if old == 0 else round((new - old) / old * 100, 2)
+
+    return app_module.jsonify({
+        "a": a["summary"],
+        "b": b["summary"],
+        "change": {
+            "grand_total": pct(a["summary"]["grand_total"], b["summary"]["grand_total"]),
+            "regular_total": pct(a["summary"]["regular_total"], b["summary"]["regular_total"]),
+            "extra_total": pct(a["summary"]["extra_total"], b["summary"]["extra_total"]),
+            "days_count": pct(a["summary"]["days_count"], b["summary"]["days_count"]),
+        },
+    })
+
+
 app_module.price_for_date = _fast_price_for_date
 app.view_functions["get_product_details"] = _fast_product_details
 app.view_functions["get_templates"] = _fast_templates
 app.view_functions["get_period_report"] = _fast_period_report
+app.add_url_rule("/api/dashboard/summary", "dashboard_summary_fast", _dashboard_summary, methods=["GET"])
+app.add_url_rule("/api/dashboard/compare", "dashboard_compare_fast", _dashboard_compare, methods=["GET"])
 
 _install_indexes()
