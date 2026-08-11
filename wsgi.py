@@ -1,6 +1,6 @@
 """Production entrypoint and performance layer for Smart Pricing.
 
-Keeps business rules in app.py while replacing only expensive read paths with
+Keeps business rules in app.py while replacing expensive read paths with
 query-efficient equivalents. The dashboard receives aggregates instead of
 shipping every historical billing row to the browser.
 """
@@ -18,13 +18,36 @@ BillingTemplate = app_module.BillingTemplate
 PeriodLock = app_module.PeriodLock
 
 
-def _install_indexes():
-    """Create indexes used by the hottest read/write paths.
+class _HealthMiddleware:
+    """Return a cheap 200 response before Flask authentication middleware.
 
-    IF NOT EXISTS keeps startup idempotent. These statements are intentionally
-    small and are safe for the PostgreSQL/SQLite deployments supported by the
-    application.
+    Render health checks must not be redirected to the login page. The health
+    probe intentionally does not touch the database so it remains cheap even
+    when the database is unavailable.
     """
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        if environ.get("PATH_INFO", "") == "/health":
+            body = b'{"status":"ok"}'
+            start_response(
+                "200 OK",
+                [
+                    ("Content-Type", "application/json"),
+                    ("Content-Length", str(len(body))),
+                    ("Cache-Control", "no-store"),
+                ],
+            )
+            return [body]
+        return self.wsgi_app(environ, start_response)
+
+
+app.wsgi_app = _HealthMiddleware(app.wsgi_app)
+
+
+def _install_indexes():
+    """Create indexes used by the hottest read/write paths."""
     statements = (
         "CREATE INDEX IF NOT EXISTS ix_daily_entry_date_id ON daily_entry (date, id)",
         "CREATE INDEX IF NOT EXISTS ix_daily_entry_date_product_extra ON daily_entry (date, product_name, is_extra)",
@@ -63,7 +86,6 @@ def _fast_product_details():
     products = Product.query.order_by(Product.name.asc()).all()
     if not products:
         return app_module.jsonify([])
-
     ids = [p.id for p in products]
     scheduled = (
         PriceHistory.query
@@ -78,7 +100,6 @@ def _fast_product_details():
     next_by_product = {}
     for row in scheduled:
         next_by_product.setdefault(row.product_id, row)
-
     return app_module.jsonify([
         {
             "id": p.id,
@@ -111,11 +132,7 @@ def _fast_templates():
     )
     return app_module.jsonify({
         t.name: [
-            {
-                "product_name": i.product_name,
-                "quantity": i.quantity,
-                "is_extra": bool(i.is_extra),
-            }
+            {"product_name": i.product_name, "quantity": i.quantity, "is_extra": bool(i.is_extra)}
             for i in t.items
         ]
         for t in templates
@@ -129,7 +146,6 @@ def _fast_period_report():
     end = (request.args.get("to") or "").strip()
     if not app_module.valid_date(start) or not app_module.valid_date(end) or start > end:
         return app_module.jsonify({"error": "טווח תאריכים לא תקין"}), 400
-
     entries = (
         DailyEntry.query
         .filter(DailyEntry.date >= start, DailyEntry.date <= end)
@@ -163,26 +179,16 @@ def _aggregate_period(start, end, include_products=True, include_days=True):
         func.count(func.distinct(DailyEntry.date)),
         func.coalesce(func.sum(DailyEntry.quantity), 0),
     ).first()
-
     grand, regular, extra, days_count, quantity = summary_row
-    grand = float(grand or 0)
-    regular = float(regular or 0)
-    extra = float(extra or 0)
-    days_count = int(days_count or 0)
-
+    grand = float(grand or 0); regular = float(regular or 0); extra = float(extra or 0); days_count = int(days_count or 0)
     payload = {
-        "from": start,
-        "to": end,
+        "from": start, "to": end,
         "summary": {
-            "grand_total": grand,
-            "regular_total": regular,
-            "extra_total": extra,
-            "days_count": days_count,
-            "average_day": grand / days_count if days_count else 0.0,
+            "grand_total": grand, "regular_total": regular, "extra_total": extra,
+            "days_count": days_count, "average_day": grand / days_count if days_count else 0.0,
             "quantity_total": float(quantity or 0),
         },
     }
-
     if include_days:
         day_rows = (
             base.with_entities(
@@ -190,52 +196,40 @@ def _aggregate_period(start, end, include_products=True, include_days=True):
                 func.coalesce(func.sum(case((DailyEntry.is_extra.is_(False), DailyEntry.total_amount), else_=0)), 0),
                 func.coalesce(func.sum(case((DailyEntry.is_extra.is_(True), DailyEntry.total_amount), else_=0)), 0),
                 func.coalesce(func.sum(DailyEntry.total_amount), 0),
-            )
-            .group_by(DailyEntry.date)
-            .order_by(DailyEntry.date.asc())
-            .all()
+            ).group_by(DailyEntry.date).order_by(DailyEntry.date.asc()).all()
         )
         payload["day_summary"] = {
-            date: {"regular": float(regular or 0), "extra": float(extra or 0), "total": float(total or 0)}
-            for date, regular, extra, total in day_rows
+            date: {"regular": float(reg or 0), "extra": float(ext or 0), "total": float(total or 0)}
+            for date, reg, ext, total in day_rows
         }
-
     if include_products:
         product_rows = (
             base.with_entities(
                 DailyEntry.product_name,
                 func.coalesce(func.sum(DailyEntry.quantity), 0),
                 func.coalesce(func.sum(DailyEntry.total_amount), 0),
-            )
-            .group_by(DailyEntry.product_name)
-            .order_by(func.sum(DailyEntry.total_amount).desc())
-            .all()
+            ).group_by(DailyEntry.product_name).order_by(func.sum(DailyEntry.total_amount).desc()).all()
         )
         payload["product_summary"] = {
             name: {"quantity": float(qty or 0), "total": float(total or 0)}
             for name, qty, total in product_rows
         }
-
     months = sorted({row[0][:7] for row in base.with_entities(DailyEntry.date).distinct().all()})
     if months:
         locked = {
-            row.year_month
-            for row in PeriodLock.query
-            .filter(PeriodLock.year_month.in_(months), PeriodLock.locked.is_(True))
-            .all()
+            row.year_month for row in PeriodLock.query
+            .filter(PeriodLock.year_month.in_(months), PeriodLock.locked.is_(True)).all()
         }
         payload["locked_months"] = {m: m in locked for m in months}
         payload["fully_locked"] = len(locked) == len(months)
     else:
-        payload["locked_months"] = {}
-        payload["fully_locked"] = False
+        payload["locked_months"] = {}; payload["fully_locked"] = False
     return payload
 
 
 def _dashboard_summary():
     request = app_module.request
-    start = (request.args.get("from") or "").strip()
-    end = (request.args.get("to") or "").strip()
+    start = (request.args.get("from") or "").strip(); end = (request.args.get("to") or "").strip()
     if not app_module.valid_date(start) or not app_module.valid_date(end) or start > end:
         return app_module.jsonify({"error": "טווח תאריכים לא תקין"}), 400
     return app_module.jsonify(_aggregate_period(start, end))
@@ -245,21 +239,15 @@ def _dashboard_compare():
     request = app_module.request
     ranges = []
     for prefix in ("a", "b"):
-        start = (request.args.get(prefix + "_from") or "").strip()
-        end = (request.args.get(prefix + "_to") or "").strip()
+        start = (request.args.get(prefix + "_from") or "").strip(); end = (request.args.get(prefix + "_to") or "").strip()
         if not app_module.valid_date(start) or not app_module.valid_date(end) or start > end:
             return app_module.jsonify({"error": "טווח השוואה לא תקין"}), 400
         ranges.append((start, end))
-
     a = _aggregate_period(*ranges[0], include_products=False, include_days=False)
     b = _aggregate_period(*ranges[1], include_products=False, include_days=False)
-
-    def pct(old, new):
-        return None if old == 0 else round((new - old) / old * 100, 2)
-
+    def pct(old, new): return None if old == 0 else round((new - old) / old * 100, 2)
     return app_module.jsonify({
-        "a": a["summary"],
-        "b": b["summary"],
+        "a": a["summary"], "b": b["summary"],
         "change": {
             "grand_total": pct(a["summary"]["grand_total"], b["summary"]["grand_total"]),
             "regular_total": pct(a["summary"]["regular_total"], b["summary"]["regular_total"]),
