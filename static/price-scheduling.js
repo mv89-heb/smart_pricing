@@ -20,6 +20,63 @@
     el.className = `fixed top-24 left-4 z-[1000] px-4 py-3 rounded-xl shadow-xl text-sm font-bold text-white ${type === 'error' ? 'bg-rose-600' : 'bg-slate-900'}`;
     el.textContent = message; document.body.appendChild(el); setTimeout(() => el.remove(), 3000);
   }
+
+  /* Keep the two workspaces truly separate. The original page intentionally
+     renders both panels in one grid; the navigation must control visibility,
+     not merely scroll to the selected panel. */
+  function setWorkspace(view) {
+    const dashboard = $('ux-dashboard');
+    const grid = document.querySelector('main > .grid');
+    const daily = $('left-panel');
+    const pricing = $('right-panel');
+    if (!grid || !daily || !pricing) return false;
+
+    const hide = (el, yes) => { if (el) el.classList.toggle('ux-workspace-hidden', yes); };
+    const style = document.getElementById('ux-workspace-separation-style');
+    if (!style) {
+      const s = document.createElement('style');
+      s.id = 'ux-workspace-separation-style';
+      s.textContent = '.ux-workspace-hidden{display:none!important}.ux-workspace-full{grid-column:1/-1!important;width:100%!important}';
+      document.head.appendChild(s);
+    }
+
+    if (view === 'dashboard') {
+      hide(dashboard, false);
+      hide(grid, true);
+      return true;
+    }
+
+    hide(dashboard, true);
+    hide(grid, false);
+    hide(daily, view !== 'daily');
+    hide(pricing, view !== 'pricing');
+    daily.classList.remove('ux-workspace-full');
+    pricing.classList.remove('ux-workspace-full');
+    if (view === 'daily') daily.classList.add('ux-workspace-full');
+    if (view === 'pricing') pricing.classList.add('ux-workspace-full');
+
+    document.querySelectorAll('#ux-shell-nav [data-v]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.v === view);
+    });
+    window.scrollTo({top: 0, behavior: 'smooth'});
+    return true;
+  }
+
+  function installWorkspaceNavigation() {
+    const nav = $('ux-shell-nav');
+    if (!nav || nav.dataset.workspaceSeparation === '1') return;
+    nav.dataset.workspaceSeparation = '1';
+    nav.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-v]');
+      if (!btn) return;
+      const view = btn.dataset.v;
+      if (!['dashboard','daily','pricing'].includes(view)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setWorkspace(view);
+    }, true);
+  }
+
   function inject() {
     const form = $('product-form');
     if (!form || $('prod-effective-from')) return;
@@ -81,10 +138,11 @@
     }, true);
   }
   function observe() {
-    const observer = new MutationObserver(() => { inject(); installSubmitGuard(); });
+    const observer = new MutationObserver(() => { inject(); installSubmitGuard(); installWorkspaceNavigation(); });
     observer.observe(document.body, {childList:true, subtree:true});
-    inject(); installSubmitGuard();
+    inject(); installSubmitGuard(); installWorkspaceNavigation();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observe); else observe();
   window.refreshScheduledPrices = refreshScheduledPanel;
+  window.setBillingWorkspace = setWorkspace;
 })();
