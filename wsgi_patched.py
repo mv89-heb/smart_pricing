@@ -4,19 +4,14 @@ Keeps the existing application intact while adding a stable history view and
 an all-data report endpoint. No database reset or destructive migration is
 performed here.
 """
-from datetime import datetime, timedelta
 from flask import jsonify, render_template
 
-from app import app, db, DailyEntry, build_report, valid_date
-
-
-def _date_n_months_ago(year: int, month: int, months: int):
-    index = year * 12 + (month - 1) - months
-    return index // 12, index % 12 + 1
+from app import app, db, DailyEntry, Product, build_report
 
 
 @app.get("/api/report/all")
 def report_all():
+    """Return the complete stored billing history without modifying anything."""
     entries = DailyEntry.query.order_by(DailyEntry.date.asc(), DailyEntry.id.asc()).all()
     if not entries:
         return jsonify(build_report([], None, None))
@@ -25,14 +20,17 @@ def report_all():
 
 @app.get("/api/data-health")
 def data_health():
-    entries = DailyEntry.query.order_by(DailyEntry.date.asc()).all()
-    products = db.session.execute(db.select(__import__("app").Product)).scalars().all()
+    """Show whether the currently connected database still contains the data."""
+    entries_count = db.session.query(DailyEntry.id).count()
+    products_count = db.session.query(Product.id).count()
+    first_entry = DailyEntry.query.order_by(DailyEntry.date.asc(), DailyEntry.id.asc()).first()
+    last_entry = DailyEntry.query.order_by(DailyEntry.date.desc(), DailyEntry.id.desc()).first()
     return jsonify({
-        "entries_count": len(entries),
-        "products_count": len(products),
-        "first_entry_date": entries[0].date if entries else None,
-        "last_entry_date": entries[-1].date if entries else None,
-        "database": app.config.get("SQLALCHEMY_DATABASE_URI", "").split("@")[-1],
+        "entries_count": entries_count,
+        "products_count": products_count,
+        "first_entry_date": first_entry.date if first_entry else None,
+        "last_entry_date": last_entry.date if last_entry else None,
+        "data_present": entries_count > 0 or products_count > 0,
     })
 
 
