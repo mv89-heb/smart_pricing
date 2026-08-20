@@ -4,7 +4,7 @@ This module owns the application's business API routes. Production-specific
 composition is intentionally kept outside this module so importing the routes
 does not implicitly import other WSGI layers.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import app as base
@@ -85,7 +85,7 @@ def update_product(product_name):
                     .order_by(PriceHistory.id.desc()).first())
         if existing:
             existing.price = price
-            existing.changed_at = datetime.utcnow()
+            existing.changed_at = datetime.now(timezone.utc)
             existing.changed_by = request.environ.get("REMOTE_USER") or "מערכת"
         else:
             db.session.add(PriceHistory(product_id=product.id, price=price, effective_from=effective,
@@ -225,11 +225,11 @@ def lock_period(year_month):
         return jsonify({"success": False, "error": "חודש לא תקין"}), 400
     row = PeriodLock.query.filter_by(year_month=year_month).first()
     if row is None:
-        row = PeriodLock(year_month=year_month, locked=True, locked_at=datetime.utcnow(), locked_by="מערכת")
+        row = PeriodLock(year_month=year_month, locked=True, locked_at=datetime.now(timezone.utc), locked_by="מערכת")
         db.session.add(row)
     else:
         row.locked = True
-        row.locked_at = datetime.utcnow()
+        row.locked_at = datetime.now(timezone.utc)
         row.locked_by = "מערכת"
     db.session.commit()
     return jsonify({"success": True, "year_month": year_month, "locked": True})
