@@ -1,7 +1,7 @@
 import os
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_from_directory, make_response
 from flask_sqlalchemy import SQLAlchemy
@@ -50,7 +50,7 @@ class PriceHistory(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey("product.id", ondelete="CASCADE"), nullable=False, index=True)
     price = db.Column(Numeric(12, 2), nullable=False)
     effective_from = db.Column(db.String(10), nullable=True, index=True)
-    changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    changed_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     changed_by = db.Column(db.String(100), default="מערכת", nullable=False)
 
 class PeriodLock(db.Model):
@@ -62,7 +62,7 @@ class PeriodLock(db.Model):
 
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     action = db.Column(db.String(50), nullable=False)
     details = db.Column(db.String(1000), nullable=False)
     username = db.Column(db.String(100), default="מערכת")
@@ -99,7 +99,7 @@ def valid_month(value):
     except ValueError: return False
 
 def today_iso():
-    return datetime.utcnow().strftime("%Y-%m-%d")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 def entry_total(entry):
     if entry.total_amount is not None: return money(entry.total_amount)
