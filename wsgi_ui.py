@@ -111,13 +111,17 @@ def browser_price_sync_apply():
 def _inject_period_report(response):
     if "text/html" not in response.headers.get("Content-Type", ""): return response
     try:
-        body=response.get_data(as_text=True); marker="</body>"
+        body=response.get_data(as_text=True); marker="</head>"
+        head_assets = '<link rel="stylesheet" href="/static/responsive-layout.css?v=1">'
+        if head_assets not in body and marker in body:
+            body=body.replace(marker,head_assets+marker,1)
+        marker="</body>"
         scripts = [
             '<script src="/static/period-report-loader.js?v=4" defer></script>',
             '<script src="/static/password-reset.js?v=4" defer></script>',
             '<script src="/static/global-filters.js?v=4" defer></script>',
             '<script src="/static/browser-price-sync.js?v=6" defer></script>',
-            '<script src="/static/mobile-product-picker.js?v=1" defer></script>',
+            '<script src="/static/mobile-product-picker.js?v=2" defer></script>',
             '<script src="/static/ui-stability.js?v=3" defer></script>',
             '<script src="/static/app-shell-stability.js?v=3" defer></script>',
             '<script src="/static/report-sort.js?v=1" defer></script>',
