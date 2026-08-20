@@ -8,7 +8,6 @@ from decimal import Decimal
 
 import app as base
 from flask import jsonify, request
-from sqlalchemy import func, case
 from sqlalchemy.exc import SQLAlchemyError
 
 app = base.app
@@ -57,20 +56,10 @@ def _period_payload(start, end):
         day["total"] += amount
         payload_entries.append(_entry_payload(entry))
     grand = regular + extra
-    return {
-        "from": start,
-        "to": end,
-        "entries": payload_entries,
-        "summary": {
-            "regular_total": regular,
-            "extra_total": extra,
-            "grand_total": grand,
-            "days_count": len(days),
-            "average_day": grand / len(days) if days else 0.0,
-        },
-        "product_summary": products,
-        "day_summary": days,
-    }
+    return {"from": start, "to": end, "entries": payload_entries,
+            "summary": {"regular_total": regular, "extra_total": extra, "grand_total": grand,
+                        "days_count": len(days), "average_day": grand / len(days) if days else 0.0},
+            "product_summary": products, "day_summary": days}
 
 
 def _valid_range(start, end):
@@ -103,6 +92,7 @@ def update_product(product_name):
     if _period_is_locked(effective):
         return jsonify({"success": False, "error": "התקופה נעולה"}), 423
     try:
+        old_name = product.name
         product.name = name
         existing = (PriceHistory.query.filter_by(product_id=product.id, effective_from=effective)
                     .order_by(PriceHistory.id.desc()).first())
@@ -116,7 +106,7 @@ def update_product(product_name):
         if effective <= base.today_iso():
             product.price = price
         db.session.commit()
-        base.log_activity("PRICE_UPDATE", f"מחיר מוצר: {product.name}, {price}, תקף מ-{effective}")
+        base.log_activity("PRICE_UPDATE", f"מחיר מוצר: {old_name} -> {product.name}, {price}, תקף מ-{effective}")
         return jsonify({"success": True, "name": product.name, "price": float(product.price),
                         "effective_from": effective})
     except SQLAlchemyError:
@@ -170,22 +160,25 @@ def create_entry():
     if quantity <= 0:
         return jsonify({"success": False, "error": "כמות חייבת להיות חיובית"}), 400
     is_extra = bool(data.get("is_extra", False))
-    unit_price = _price_for_date(product, date_value)
+    selected_price = _price_for_date(product, date_value)
     note = str(data.get("note") or "").strip()[:255] or None
     try:
         existing = (DailyEntry.query.filter_by(date=date_value, product_name=product.name, is_extra=is_extra)
                     .order_by(DailyEntry.id.asc()).first())
         if existing is not None:
+            # An existing daily row represents the price already used for that date.
+            # Never rewrite its historical unit price merely because the product
+            # price changed later; only aggregate the quantity into the row.
+            effective_price = base.money(existing.unit_price)
             existing.quantity = float(existing.quantity or 0) + quantity
-            existing.unit_price = unit_price
-            existing.total_amount = (base.money(existing.quantity) * unit_price).quantize(Decimal("0.01"))
+            existing.total_amount = (base.money(existing.quantity) * effective_price).quantize(Decimal("0.01"))
             if note:
                 existing.note = note
             db.session.commit()
             return jsonify(_entry_payload(existing))
         entry = DailyEntry(date=date_value, product_name=product.name, quantity=quantity,
-                           is_extra=is_extra, unit_price=unit_price,
-                           total_amount=(base.money(quantity) * unit_price).quantize(Decimal("0.01")), note=note)
+                           is_extra=is_extra, unit_price=selected_price,
+                           total_amount=(base.money(quantity) * selected_price).quantize(Decimal("0.01")), note=note)
         db.session.add(entry)
         db.session.commit()
         return jsonify(_entry_payload(entry))
@@ -297,8 +290,6 @@ def unlock_period(year_month):
     return jsonify({"success": True, "year_month": year_month, "locked": False})
 
 
-# Expose the helper on the Flask object for legacy callers/tests.
+# Expose helpers on the Flask object for legacy callers/tests.
 app.price_for_date = _price_for_date
-
-# Importing this module is the production composition step.  The existing
-# wsgi_ui layer remains responsible for UI-only endpoints.
+app.money = base.money
