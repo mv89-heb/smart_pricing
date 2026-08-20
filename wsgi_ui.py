@@ -4,6 +4,7 @@ This module owns UI-only helpers and administrative API endpoints. It does not
 import another WSGI module; production composition is handled by production.py.
 """
 from datetime import datetime, timezone
+import math
 
 import app as base
 from flask import jsonify, request, session
@@ -108,6 +109,8 @@ def browser_price_sync_apply():
     effective_from = data.get("effective_from")
     if not isinstance(updates, list) or not updates:
         return jsonify({"success": False, "error": "אין עדכונים"}), 400
+    if len(updates) > 100:
+        return jsonify({"success": False, "error": "ניתן לעדכן עד 100 מוצרים בפעולה אחת"}), 400
     if not isinstance(effective_from, str) or not base.valid_date(effective_from):
         return jsonify({"success": False, "error": "תאריך תוקף לא תקין"}), 400
     if base.PeriodLock.query.filter_by(year_month=effective_from[:7], locked=True).first():
@@ -115,7 +118,7 @@ def browser_price_sync_apply():
 
     applied = []
     try:
-        for item in updates[:100]:
+        for item in updates:
             if not isinstance(item, dict):
                 continue
             name = str(item.get("name") or "").strip()[:100]
@@ -123,7 +126,7 @@ def browser_price_sync_apply():
                 price = float(item.get("price"))
             except (TypeError, ValueError):
                 continue
-            if not name or price <= 0:
+            if not name or not math.isfinite(price) or price <= 0 or price >= 100000000:
                 continue
             product = base.Product.query.filter_by(name=name).first()
             if not product:
