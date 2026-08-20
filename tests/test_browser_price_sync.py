@@ -115,3 +115,47 @@ def test_browser_price_sync_applies_valid_update():
         rows = PriceHistory.query.filter_by(product_id=product.id).all()
         assert len(rows) == 1
         assert float(rows[0].price) == 8.25
+
+
+def test_browser_price_sync_rejects_more_than_100_updates():
+    client = app.test_client()
+    auth(client)
+
+    response = client.post(
+        "/api/browser-price-sync/apply",
+        json={
+            "effective_from": "2026-08-20",
+            "updates": [{"name": f"מוצר {index}", "price": 10} for index in range(101)],
+        },
+        headers=headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["success"] is False
+
+
+def test_browser_price_sync_rejects_non_finite_price():
+    client = app.test_client()
+    auth(client)
+
+    assert client.post(
+        "/api/products",
+        json={"name": "גבינה", "price": 12},
+        headers=headers(),
+    ).status_code == 200
+
+    for invalid_price in ["NaN", "Infinity", "-Infinity"]:
+        response = client.post(
+            "/api/browser-price-sync/apply",
+            json={
+                "effective_from": "2026-08-20",
+                "updates": [{"name": "גבינה", "price": invalid_price}],
+            },
+            headers=headers(),
+        )
+        assert response.status_code == 200
+        assert response.get_json()["applied"] == []
+
+    with app.app_context():
+        product = Product.query.filter_by(name="גבינה").one()
+        assert float(product.price) == 12.0
