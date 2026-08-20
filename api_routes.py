@@ -1,4 +1,9 @@
-"""Core API routes and production composition for Smart Pricing."""
+"""Core API routes for Smart Pricing.
+
+This module owns the application's business API routes.  Production-specific
+composition is intentionally kept outside this module so importing the routes
+does not implicitly import other WSGI layers.
+"""
 from datetime import datetime
 from decimal import Decimal
 
@@ -196,49 +201,68 @@ def get_entries(date_value):
 
 @app.route("/api/report/period", methods=["GET"])
 def get_period_report():
-    start = str(request.args.get("from") or "").strip(); end = str(request.args.get("to") or "").strip()
-    if not _valid_range(start, end): return jsonify({"error": "טווח תאריכים לא תקין"}), 400
+    start = str(request.args.get("from") or "").strip()
+    end = str(request.args.get("to") or "").strip()
+    if not _valid_range(start, end):
+        return jsonify({"error": "טווח תאריכים לא תקין"}), 400
     return jsonify(_period_payload(start, end))
+
+
+def _compare_payload(a_from, a_to, b_from, b_to):
+    a = _period_payload(a_from, a_to)["summary"]
+    b = _period_payload(b_from, b_to)["summary"]
+
+    def pct(old, new):
+        return None if old == 0 else round((new - old) / old * 100, 2)
+
+    return {"a": a, "b": b, "change": {
+        "grand_total": pct(a["grand_total"], b["grand_total"]),
+        "regular_total": pct(a["regular_total"], b["regular_total"]),
+        "extra_total": pct(a["extra_total"], b["extra_total"]),
+        "days_count": pct(a["days_count"], b["days_count"]),
+    }}
 
 
 @app.route("/api/report/compare", methods=["GET"])
 def compare_report():
-    a_from = str(request.args.get("a_from") or "").strip(); a_to = str(request.args.get("a_to") or "").strip()
-    b_from = str(request.args.get("b_from") or "").strip(); b_to = str(request.args.get("b_to") or "").strip()
-    if not all((_valid_range(a_from, a_to), _valid_range(b_from, b_to))): return jsonify({"error": "טווח השוואה לא תקין"}), 400
-    a = _period_payload(a_from, a_to)["summary"]; b = _period_payload(b_from, b_to)["summary"]
-    def pct(old, new): return None if old == 0 else round((new - old) / old * 100, 2)
-    return jsonify({"a": a, "b": b, "change": {"grand_total": pct(a["grand_total"], b["grand_total"]), "regular_total": pct(a["regular_total"], b["regular_total"]), "extra_total": pct(a["extra_total"], b["extra_total"]), "days_count": pct(a["days_count"], b["days_count"])}})
+    values = [str(request.args.get(key) or "").strip() for key in ("a_from", "a_to", "b_from", "b_to")]
+    if not _valid_range(values[0], values[1]) or not _valid_range(values[2], values[3]):
+        return jsonify({"error": "טווח השוואה לא תקין"}), 400
+    return jsonify(_compare_payload(*values))
 
 
 @app.route("/api/dashboard/summary", methods=["GET"])
 def dashboard_summary():
-    start = str(request.args.get("from") or "").strip(); end = str(request.args.get("to") or "").strip()
-    if not _valid_range(start, end): return jsonify({"error": "טווח תאריכים לא תקין"}), 400
+    start = str(request.args.get("from") or "").strip()
+    end = str(request.args.get("to") or "").strip()
+    if not _valid_range(start, end):
+        return jsonify({"error": "טווח תאריכים לא תקין"}), 400
     return jsonify(_period_payload(start, end))
 
 
 @app.route("/api/dashboard/compare", methods=["GET"])
 def dashboard_compare():
-    a_from = str(request.args.get("a_from") or "").strip(); a_to = str(request.args.get("a_to") or "").strip()
-    b_from = str(request.args.get("b_from") or "").strip(); b_to = str(request.args.get("b_to") or "").strip()
-    if not all((_valid_range(a_from, a_to), _valid_range(b_from, b_to))): return jsonify({"error": "טווח השוואה לא תקין"}), 400
-    a = _period_payload(a_from, a_to)["summary"]; b = _period_payload(b_from, b_to)["summary"]
-    def pct(old, new): return None if old == 0 else round((new - old) / old * 100, 2)
-    return jsonify({"a": a, "b": b, "change": {"grand_total": pct(a["grand_total"], b["grand_total"]), "regular_total": pct(a["regular_total"], b["regular_total"]), "extra_total": pct(a["extra_total"], b["extra_total"]), "days_count": pct(a["days_count"], b["days_count"])}})
+    values = [str(request.args.get(key) or "").strip() for key in ("a_from", "a_to", "b_from", "b_to")]
+    if not _valid_range(values[0], values[1]) or not _valid_range(values[2], values[3]):
+        return jsonify({"error": "טווח השוואה לא תקין"}), 400
+    return jsonify(_compare_payload(*values))
 
 
 @app.post("/api/periods/<string:year_month>/lock")
 def lock_period(year_month):
     denied = _deny_write()
-    if denied: return denied
-    if not base.valid_month(year_month): return jsonify({"success": False, "error": "חודש לא תקין"}), 400
+    if denied:
+        return denied
+    if not base.valid_month(year_month):
+        return jsonify({"success": False, "error": "חודש לא תקין"}), 400
     row = PeriodLock.query.filter_by(year_month=year_month).first()
     if row is None:
         row = PeriodLock(year_month=year_month, locked=True, locked_at=datetime.utcnow(), locked_by="מערכת")
         db.session.add(row)
     else:
-        row.locked = True; row.locked_at = datetime.utcnow(); row.locked_by = "מערכת"
+        row.locked = True
+        row.locked_at = datetime.utcnow()
+        row.locked_by = "מערכת"
     db.session.commit()
     return jsonify({"success": True, "year_month": year_month, "locked": True})
 
@@ -246,11 +270,14 @@ def lock_period(year_month):
 @app.post("/api/periods/<string:year_month>/unlock")
 def unlock_period(year_month):
     denied = _deny_write()
-    if denied: return denied
-    if not base.valid_month(year_month): return jsonify({"success": False, "error": "חודש לא תקין"}), 400
+    if denied:
+        return denied
+    if not base.valid_month(year_month):
+        return jsonify({"success": False, "error": "חודש לא תקין"}), 400
     row = PeriodLock.query.filter_by(year_month=year_month).first()
     if row is None:
-        row = PeriodLock(year_month=year_month, locked=False); db.session.add(row)
+        row = PeriodLock(year_month=year_month, locked=False)
+        db.session.add(row)
     else:
         row.locked = False
     db.session.commit()
@@ -259,17 +286,15 @@ def unlock_period(year_month):
 
 @app.get("/api/templates")
 def get_templates():
-    return jsonify({template.name: [{"product_name": item.product_name, "quantity": item.quantity, "is_extra": bool(item.is_extra)} for item in template.items]
-                    for template in BillingTemplate.query.order_by(BillingTemplate.name.asc()).all()})
+    return jsonify({
+        template.name: [
+            {"product_name": item.product_name, "quantity": item.quantity, "is_extra": bool(item.is_extra)}
+            for item in template.items
+        ]
+        for template in BillingTemplate.query.order_by(BillingTemplate.name.asc()).all()
+    })
 
 
-app.price_for_date = _price_for_date
-app.money = base.money
-
-try:
-    import wsgi_ui as _ui  # noqa: F401,E402
-except Exception:
-    _ui = None
-
+# Compatibility hooks used by the existing frontend/services.
 app.price_for_date = _price_for_date
 app.money = base.money
