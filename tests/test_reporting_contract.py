@@ -40,8 +40,17 @@ def setup_function(_):
         db.session.commit()
 
 
+def _client():
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session["logged_in"] = True
+        session["username"] = "admin"
+        session["role"] = "admin"
+    return client
+
+
 def _get(path):
-    return app.test_client().get(path)
+    return _client().get(path)
 
 
 def test_dashboard_and_period_report_preserve_full_response_contract():
@@ -81,12 +90,13 @@ def test_dashboard_and_period_report_preserve_full_response_contract():
 
 
 def test_dashboard_and_period_compare_preserve_compare_contract():
-    dashboard = _get(
+    client = _client()
+    dashboard = client.get(
         "/api/dashboard/compare?"
         "a_from=2026-08-18&a_to=2026-08-18&"
         "b_from=2026-08-19&b_to=2026-08-19"
     )
-    report = _get(
+    report = client.get(
         "/api/report/compare?"
         "a_from=2026-08-18&a_to=2026-08-18&"
         "b_from=2026-08-19&b_to=2026-08-19"
