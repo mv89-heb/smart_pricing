@@ -96,11 +96,12 @@ def _inject_period_report(response):
     try:
         body=response.get_data(as_text=True); marker="</body>"
         scripts = [
-            '<script src="/static/period-report-loader.js?v=2" defer></script>',
-            '<script src="/static/password-reset.js?v=2" defer></script>',
-            '<script src="/static/global-filters.js?v=2" defer></script>',
-            '<script src="/static/browser-price-sync.js?v=3" defer></script>',
-            '<script src="/static/ui-stability.js?v=1" defer></script>',
+            '<script src="/static/period-report-loader.js?v=3" defer></script>',
+            '<script src="/static/password-reset.js?v=3" defer></script>',
+            '<script src="/static/global-filters.js?v=3" defer></script>',
+            '<script src="/static/browser-price-sync.js?v=4" defer></script>',
+            '<script src="/static/ui-stability.js?v=2" defer></script>',
+            '<script src="/static/app-shell-stability.js?v=1" defer></script>',
         ]
         for script in scripts:
             if script not in body and marker in body: body=body.replace(marker,script+marker,1)
