@@ -216,6 +216,19 @@ def dashboard_compare():
     return jsonify(_compare_payload(*values))
 
 
+@app.get("/api/periods/<string:year_month>")
+def get_period_lock(year_month):
+    """Expose read-only lock state so the existing UI can prevent avoidable writes."""
+    if not base.valid_month(year_month):
+        return jsonify({"error": "חודש לא תקין"}), 400
+    row = PeriodLock.query.filter_by(year_month=year_month).first()
+    return jsonify({
+        "year_month": year_month,
+        "locked": bool(row and row.locked),
+        "locked_at": row.locked_at.isoformat() if row and row.locked_at else None,
+    })
+
+
 @app.post("/api/periods/<string:year_month>/lock")
 def lock_period(year_month):
     denied = _deny_write()
