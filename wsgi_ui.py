@@ -1,11 +1,11 @@
-"""Production entrypoint with UI helpers, password reset and AI price discovery."""
+"""Production entrypoint with UI helpers and API-free browser price discovery."""
 import os
 from datetime import datetime
 import app as base
 from flask import jsonify, request, session
 from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import SQLAlchemyError
-from services.ai_price_search import search_product_price
+from services.browser_price_search import search_products
 
 app = base.app
 User = base.User
@@ -38,37 +38,24 @@ def reset_user_password(user_id):
         base.db.session.rollback()
         return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
-@app.get("/api/ai-price-sync/status")
-def ai_price_sync_status():
+@app.post("/api/browser-price-sync/search")
+def browser_price_sync_search():
     denied = admin_access()
     if denied: return denied
-    return jsonify({"configured": bool(os.environ.get("GEMINI_API_KEY")), "model": os.environ.get("GEMINI_PRICE_MODEL", "gemini-3.6-flash")})
-
-@app.post("/api/ai-price-sync/search")
-def ai_price_sync_search():
-    denied = admin_access()
-    if denied: return denied
-    if not os.environ.get("GEMINI_API_KEY"):
-        return jsonify({"success": False, "error": "GEMINI_API_KEY לא מוגדר ב-Render"}), 503
     data = request.get_json(silent=True) or {}
     products = data.get("products")
     if not isinstance(products, list) or not products:
         return jsonify({"success": False, "error": "לא נבחרו מוצרים"}), 400
     if len(products) > 100:
         return jsonify({"success": False, "error": "ניתן לבדוק עד 100 מוצרים בפעולה אחת"}), 400
-    results = []
-    for item in products:
-        name = str(item.get("name") or "").strip()[:100]
-        if not name: continue
-        try:
-            found = search_product_price(name, str(item.get("tag") or "").strip()[:80])
-            results.append({"name": name, "current_price": float(item.get("current_price") or 0), **found})
-        except Exception as exc:
-            results.append({"name": name, "current_price": float(item.get("current_price") or 0), "found": False, "confidence": 0, "error": str(exc)[:300]})
-    return jsonify({"success": True, "results": results})
+    try:
+        results = search_products(products)
+        return jsonify({"success": True, "results": results})
+    except Exception as exc:
+        return jsonify({"success": False, "error": f"חיפוש המחירים נכשל: {str(exc)[:300]}"}), 500
 
-@app.post("/api/ai-price-sync/apply")
-def ai_price_sync_apply():
+@app.post("/api/browser-price-sync/apply")
+def browser_price_sync_apply():
     denied = admin_access()
     if denied: return denied
     data = request.get_json(silent=True) or {}
@@ -88,14 +75,14 @@ def ai_price_sync_apply():
             product=base.Product.query.filter_by(name=name).first()
             if not product: continue
             value=base.money(price)
-            base.db.session.add(base.PriceHistory(product_id=product.id,price=value,effective_from=effective_from,changed_by=session.get("username","AI")))
+            base.db.session.add(base.PriceHistory(product_id=product.id,price=value,effective_from=effective_from,changed_by=session.get("username","browser-search")))
             if effective_from <= base.today_iso(): product.price=value
             applied.append({"name":name,"price":float(value),"effective_from":effective_from})
         base.db.session.commit()
     except Exception:
         base.db.session.rollback()
         return jsonify({"success":False,"error":"שמירת העדכונים נכשלה"}),500
-    log_activity("AI_PRICE_SYNC_APPLIED", f"עודכנו {len(applied)} מוצרים באמצעות Google AI")
+    log_activity("BROWSER_PRICE_SYNC_APPLIED", f"עודכנו {len(applied)} מוצרים באמצעות חיפוש Google בדפדפן")
     return jsonify({"success":True,"applied":applied})
 
 def _inject_period_report(response):
@@ -106,7 +93,7 @@ def _inject_period_report(response):
             '<script src="/static/period-report-loader.js?v=1" defer></script>',
             '<script src="/static/password-reset.js?v=1" defer></script>',
             '<script src="/static/global-filters.js?v=1" defer></script>',
-            '<script src="/static/ai-price-sync.js?v=1" defer></script>',
+            '<script src="/static/browser-price-sync.js?v=1" defer></script>',
         ]:
             if script not in body and marker in body: body=body.replace(marker,script+marker,1)
         response.set_data(body); response.headers["Cache-Control"]="no-store, max-age=0"
