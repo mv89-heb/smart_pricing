@@ -75,7 +75,13 @@ def browser_price_sync_apply():
             product=base.Product.query.filter_by(name=name).first()
             if not product: continue
             value=base.money(price)
-            base.db.session.add(base.PriceHistory(product_id=product.id,price=value,effective_from=effective_from,changed_by=session.get("username","browser-search")))
+            existing = base.PriceHistory.query.filter_by(product_id=product.id, effective_from=effective_from).order_by(base.PriceHistory.id.desc()).first()
+            if existing:
+                existing.price=value
+                existing.changed_at=datetime.utcnow()
+                existing.changed_by=session.get("username","browser-search")
+            else:
+                base.db.session.add(base.PriceHistory(product_id=product.id,price=value,effective_from=effective_from,changed_by=session.get("username","browser-search")))
             if effective_from <= base.today_iso(): product.price=value
             applied.append({"name":name,"price":float(value),"effective_from":effective_from})
         base.db.session.commit()
@@ -89,12 +95,14 @@ def _inject_period_report(response):
     if "text/html" not in response.headers.get("Content-Type", ""): return response
     try:
         body=response.get_data(as_text=True); marker="</body>"
-        for script in [
-            '<script src="/static/period-report-loader.js?v=1" defer></script>',
-            '<script src="/static/password-reset.js?v=1" defer></script>',
-            '<script src="/static/global-filters.js?v=1" defer></script>',
-            '<script src="/static/browser-price-sync.js?v=2" defer></script>',
-        ]:
+        scripts = [
+            '<script src="/static/period-report-loader.js?v=2" defer></script>',
+            '<script src="/static/password-reset.js?v=2" defer></script>',
+            '<script src="/static/global-filters.js?v=2" defer></script>',
+            '<script src="/static/browser-price-sync.js?v=3" defer></script>',
+            '<script src="/static/ui-stability.js?v=1" defer></script>',
+        ]
+        for script in scripts:
             if script not in body and marker in body: body=body.replace(marker,script+marker,1)
         response.set_data(body); response.headers["Cache-Control"]="no-store, max-age=0"
     except Exception: pass
