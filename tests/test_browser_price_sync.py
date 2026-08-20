@@ -7,7 +7,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{DB_FILE.name}"
 os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["FLASK_ENV"] = "development"
 
-from app import app, db, Product, PeriodLock, PriceHistory
+from app import app, db, Product, PriceHistory
 import wsgi_ui  # noqa: F401,E402
 
 
@@ -37,6 +37,8 @@ def test_browser_price_sync_respects_period_lock():
         json={"name": "חלב", "price": 8},
         headers=headers(),
     ).status_code == 200
+    with app.app_context():
+        before_count = PriceHistory.query.count()
     assert client.post("/api/periods/2026-08/lock", headers=headers()).status_code == 200
 
     response = client.post(
@@ -52,7 +54,8 @@ def test_browser_price_sync_respects_period_lock():
     with app.app_context():
         product = Product.query.filter_by(name="חלב").one()
         assert float(product.price) == 8.0
-        assert PriceHistory.query.count() == 0
+        assert PriceHistory.query.count() == before_count
+        assert not PriceHistory.query.filter_by(effective_from="2026-08-20").first()
 
 
 def test_browser_price_sync_applies_valid_update():
@@ -79,3 +82,5 @@ def test_browser_price_sync_applies_valid_update():
     with app.app_context():
         product = Product.query.filter_by(name="לחם").one()
         assert float(product.price) == 8.25
+        history = PriceHistory.query.filter_by(product_id=product.id, effective_from="2026-08-20").one()
+        assert float(history.price) == 8.25
