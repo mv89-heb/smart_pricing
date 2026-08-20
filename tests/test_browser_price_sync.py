@@ -1,0 +1,81 @@
+import os
+import tempfile
+
+DB_FILE = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+DB_FILE.close()
+os.environ["DATABASE_URL"] = f"sqlite:///{DB_FILE.name}"
+os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["FLASK_ENV"] = "development"
+
+from app import app, db, Product, PeriodLock, PriceHistory
+import wsgi_ui  # noqa: F401,E402
+
+
+def auth(client):
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["username"] = "admin"
+        sess["role"] = "admin"
+
+
+def headers(origin="http://localhost"):
+    return {"X-Requested-With": "XMLHttpRequest", "Origin": origin}
+
+
+def setup_function(_):
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
+
+
+def test_browser_price_sync_respects_period_lock():
+    client = app.test_client()
+    auth(client)
+
+    assert client.post(
+        "/api/products",
+        json={"name": "חלב", "price": 8},
+        headers=headers(),
+    ).status_code == 200
+    assert client.post("/api/periods/2026-08/lock", headers=headers()).status_code == 200
+
+    response = client.post(
+        "/api/browser-price-sync/apply",
+        json={
+            "effective_from": "2026-08-20",
+            "updates": [{"name": "חלב", "price": 9}],
+        },
+        headers=headers(),
+    )
+
+    assert response.status_code == 423
+    with app.app_context():
+        product = Product.query.filter_by(name="חלב").one()
+        assert float(product.price) == 8.0
+        assert PriceHistory.query.count() == 0
+
+
+def test_browser_price_sync_applies_valid_update():
+    client = app.test_client()
+    auth(client)
+
+    assert client.post(
+        "/api/products",
+        json={"name": "לחם", "price": 7.5},
+        headers=headers(),
+    ).status_code == 200
+
+    response = client.post(
+        "/api/browser-price-sync/apply",
+        json={
+            "effective_from": "2026-08-20",
+            "updates": [{"name": "לחם", "price": 8.25}],
+        },
+        headers=headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["applied"][0]["price"] == 8.25
+    with app.app_context():
+        product = Product.query.filter_by(name="לחם").one()
+        assert float(product.price) == 8.25
