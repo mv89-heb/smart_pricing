@@ -3,7 +3,7 @@
 This module owns UI-only helpers and administrative API endpoints. It does not
 import another WSGI module; production composition is handled by production.py.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 import app as base
 from flask import jsonify, request, session
@@ -67,7 +67,7 @@ def reset_user_password(user_id):
         return jsonify({"success": False, "error": "סיסמה חייבת להכיל לפחות 8 תווים"}), 400
     if len(password) > 128:
         return jsonify({"success": False, "error": "סיסמה ארוכה מדי"}), 400
-    user = User.query.get(user_id)
+    user = base.db.session.get(User, user_id)
     if not user:
         return jsonify({"success": False, "error": "המשתמש לא נמצא"}), 404
     try:
@@ -134,7 +134,7 @@ def browser_price_sync_apply():
                         .order_by(base.PriceHistory.id.desc()).first())
             if existing:
                 existing.price = value
-                existing.changed_at = datetime.utcnow()
+                existing.changed_at = datetime.now(timezone.utc)
                 existing.changed_by = session.get("username", "browser-search")
             else:
                 base.db.session.add(base.PriceHistory(
