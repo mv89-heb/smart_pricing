@@ -1,1 +1,1 @@
-web: playwright install chromium && gunicorn --workers 2 --threads 4 --timeout 120 --keep-alive 5 --access-logfile - --error-logfile - api_routes:app
+web: playwright install chromium && gunicorn --workers 2 --threads 4 --timeout 120 --keep-alive 5 --access-logfile - --error-logfile - production:app
