@@ -17,6 +17,23 @@ try:
 except Exception:
     performance = None
 
+@app.get("/api/system/health")
+def system_health():
+    """Authenticated, low-detail readiness check used by the UI and deploy debugging."""
+    if not session.get("logged_in"):
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    required = ["product", "daily_entry", "price_history", "period_lock", "activity_log", "user", "billing_template", "billing_template_item"]
+    try:
+        inspector = base.db.inspect(base.db.engine)
+        existing = {item["name"] for item in inspector.get_table_names() and inspector.get_table_names()}
+        missing = [table for table in required if table not in existing]
+        if missing:
+            return jsonify({"ok": False, "error": "מסד הנתונים אינו מעודכן", "database": base.db.engine.name, "tables_checked": len(required), "missing": missing}), 503
+        base.db.session.execute(base.text("SELECT 1"))
+        return jsonify({"ok": True, "database": base.db.engine.name, "tables_checked": len(required), "missing": []})
+    except Exception:
+        return jsonify({"ok": False, "error": "מסד הנתונים אינו זמין", "database": base.db.engine.name, "tables_checked": len(required)}), 503
+
 @app.post("/api/users/<int:user_id>/reset-password")
 def reset_user_password(user_id):
     denied = admin_access()
@@ -96,16 +113,19 @@ def _inject_period_report(response):
     try:
         body=response.get_data(as_text=True); marker="</body>"
         scripts = [
-            '<script src="/static/period-report-loader.js?v=3" defer></script>',
-            '<script src="/static/password-reset.js?v=3" defer></script>',
-            '<script src="/static/global-filters.js?v=3" defer></script>',
-            '<script src="/static/browser-price-sync.js?v=4" defer></script>',
-            '<script src="/static/ui-stability.js?v=2" defer></script>',
-            '<script src="/static/app-shell-stability.js?v=1" defer></script>',
+            '<script src="/static/period-report-loader.js?v=4" defer></script>',
+            '<script src="/static/password-reset.js?v=4" defer></script>',
+            '<script src="/static/global-filters.js?v=4" defer></script>',
+            '<script src="/static/browser-price-sync.js?v=5" defer></script>',
+            '<script src="/static/ui-stability.js?v=3" defer></script>',
+            '<script src="/static/app-shell-stability.js?v=2" defer></script>',
+            '<script src="/static/report-sort.js?v=1" defer></script>',
+            '<script src="/static/system-health.js?v=1" defer></script>',
         ]
         for script in scripts:
             if script not in body and marker in body: body=body.replace(marker,script+marker,1)
-        response.set_data(body); response.headers["Cache-Control"]="no-store, max-age=0"
+        response.set_data(body)
+        response.headers["Cache-Control"]="no-store, max-age=0"
     except Exception: pass
     return response
 
