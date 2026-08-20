@@ -22,6 +22,14 @@ def test_production_entrypoint_registers_core_routes():
     assert "/api/users/<int:user_id>/reset-password" in rules
     assert "/api/report/all" in rules
     assert "/api/data-health" in rules
+    assert "/api/periods/<string:year_month>" in rules
+    assert "/api/periods/<string:year_month>/lock" in rules
+    assert "/api/periods/<string:year_month>/unlock" in rules
+
+
+def test_production_entrypoint_preserves_dashboard_period_lock_urls():
+    rules = {rule.rule for rule in production.app.url_map.iter_rules()}
+    assert "/api/period-locks/<string:year_month>" in rules
 
 
 def test_production_entrypoint_exposes_health_endpoint():
