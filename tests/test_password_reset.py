@@ -3,7 +3,8 @@ import os
 os.environ.setdefault("FLASK_ENV", "development")
 os.environ.setdefault("DATABASE_URL", "sqlite:///test_password_reset.db")
 
-from app import app, db, User
+from wsgi_ui import app
+from app import db, User
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
