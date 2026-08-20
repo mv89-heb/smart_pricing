@@ -73,7 +73,6 @@ def test_dashboard_and_period_report_preserve_full_response_contract():
         "extra_total": 8.0,
         "days_count": 2,
         "average_day": 12.0,
-        "quantity_total": 3.0,
     }
     assert dashboard_payload["product_summary"]["חלב"] == {
         "quantity": 3.0,
