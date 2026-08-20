@@ -25,12 +25,11 @@ def period_summary(base, start, end):
     amount = _amount_expr(DailyEntry)
     regular = case((DailyEntry.is_extra.is_(False), amount), else_=0)
     extra = case((DailyEntry.is_extra.is_(True), amount), else_=0)
-    grand, regular_total, extra_total, days_count, quantity_total = query.with_entities(
+    grand, regular_total, extra_total, days_count = query.with_entities(
         func.coalesce(func.sum(amount), 0),
         func.coalesce(func.sum(regular), 0),
         func.coalesce(func.sum(extra), 0),
         func.count(func.distinct(DailyEntry.date)),
-        func.coalesce(func.sum(DailyEntry.quantity), 0),
     ).first()
 
     months = [month for month, in query.with_entities(func.substr(DailyEntry.date, 1, 7)).distinct().all()]
@@ -52,7 +51,6 @@ def period_summary(base, start, end):
             "extra_total": float(extra_total or 0),
             "days_count": days_count,
             "average_day": grand / days_count if days_count else 0.0,
-            "quantity_total": float(quantity_total or 0),
         },
         "locked_months": {month: month in locked for month in sorted(months)},
         "fully_locked": bool(months) and len(locked) == len(months),
