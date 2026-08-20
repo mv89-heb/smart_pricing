@@ -160,10 +160,21 @@ def admin_access():
     return None
 
 def price_for_date(product, iso_date):
-    fallback = money(product.price)
-    rows = PriceHistory.query.filter_by(product_id=product.id).order_by(PriceHistory.effective_from.asc(), PriceHistory.id.asc()).all()
+    """Return the historical price effective on iso_date.
+
+    If the requested date predates the first history row, use that first
+    recorded price rather than today's mutable Product.price. This preserves
+    historical accuracy when an old entry is added after a price change.
+    """
+    rows = PriceHistory.query.filter_by(product_id=product.id).order_by(
+        PriceHistory.effective_from.asc(), PriceHistory.id.asc()
+    ).all()
+    if not rows:
+        return money(product.price)
     candidates = [r for r in rows if r.effective_from and r.effective_from <= iso_date]
-    return money(candidates[-1].price) if candidates else fallback
+    if candidates:
+        return money(candidates[-1].price)
+    return money(rows[0].price)
 
 def price_history_json(product):
     today = today_iso()
@@ -200,7 +211,7 @@ def security_headers(response):
 def index():
     html = render_template("index.html")
     if "</body>" in html:
-        html = html.replace("</body>", '<script src="/static/ux-enhancements.js" defer></script><script src="/static/price-scheduling.js" defer></script></body>')
+        html = html.replace("</body>", '<script src="/static/ux-enhancements.js?v=2" defer></script><script src="/static/price-scheduling.js?v=2" defer></script></body>')
     return make_response(html)
 
 @app.route("/periodic-report")
@@ -420,6 +431,27 @@ def compare_reports():
     def pct(old, new): return None if old == 0 else round((new - old) / old * 100, 2)
     return jsonify({"a": a, "b": b, "change": {"grand_total": pct(a["summary"]["grand_total"], b["summary"]["grand_total"]), "regular_total": pct(a["summary"]["regular_total"], b["summary"]["regular_total"]), "extra_total": pct(a["summary"]["extra_total"], b["summary"]["extra_total"]), "days_count": pct(a["summary"]["days_count"], b["summary"]["days_count"])}})
 
+@app.route("/api/dashboard/summary")
+def dashboard_summary():
+    start = (request.args.get("from") or "").strip(); end = (request.args.get("to") or "").strip()
+    if not valid_date(start) or not valid_date(end) or start > end: return jsonify({"error": "טווח תאריכים לא תקין"}), 400
+    entries = DailyEntry.query.filter(DailyEntry.date >= start, DailyEntry.date <= end).order_by(DailyEntry.date.asc(), DailyEntry.id.asc()).all()
+    payload = build_report(entries, start, end)
+    months = sorted({e.date[:7] for e in entries})
+    payload["locked_months"] = {m: bool(PeriodLock.query.filter_by(year_month=m, locked=True).first()) for m in months}
+    return jsonify(payload)
+
+@app.route("/api/dashboard/compare")
+def dashboard_compare():
+    a_from = (request.args.get("a_from") or "").strip(); a_to = (request.args.get("a_to") or "").strip()
+    b_from = (request.args.get("b_from") or "").strip(); b_to = (request.args.get("b_to") or "").strip()
+    for start, end in ((a_from, a_to), (b_from, b_to)):
+        if not valid_date(start) or not valid_date(end) or start > end: return jsonify({"error": "טווח השוואה לא תקין"}), 400
+    a = build_report(DailyEntry.query.filter(DailyEntry.date >= a_from, DailyEntry.date <= a_to).all(), a_from, a_to)
+    b = build_report(DailyEntry.query.filter(DailyEntry.date >= b_from, DailyEntry.date <= b_to).all(), b_from, b_to)
+    def pct(old, new): return None if old == 0 else round((new - old) / old * 100, 2)
+    return jsonify({"a": a, "b": b, "change": {"grand_total": pct(a["summary"]["grand_total"], b["summary"]["grand_total"]), "regular_total": pct(a["summary"]["regular_total"], b["summary"]["regular_total"]), "extra_total": pct(a["summary"]["extra_total"], b["summary"]["extra_total"])}})
+
 @app.route("/api/periods")
 def get_periods(): return jsonify([{"year_month": r.year_month, "locked": r.locked, "locked_at": r.locked_at.isoformat() if r.locked_at else None, "locked_by": r.locked_by} for r in PeriodLock.query.order_by(PeriodLock.year_month.desc()).all()])
 
@@ -461,7 +493,9 @@ def save_template():
         for i in items:
             q = float(i.get("quantity", 0))
             if q <= 0: raise ValueError
-            db.session.add(BillingTemplateItem(template=t, product_name=i["product_name"], quantity=q, is_extra=bool(i.get("is_extra", False))))
+            product_name = str(i.get("product_name") or "").strip()
+            if not product_name or not Product.query.filter_by(name=product_name).first(): raise ValueError
+            db.session.add(BillingTemplateItem(template=t, product_name=product_name, quantity=q, is_extra=bool(i.get("is_extra", False))))
         db.session.commit(); return jsonify({"success": True})
     except (KeyError, TypeError, ValueError):
         db.session.rollback(); return jsonify({"success": False, "error": "נתוני תבנית שגויים"}), 400
@@ -496,7 +530,7 @@ def create_or_update_user():
     denied = admin_access()
     if denied: return denied
     data = request.get_json(silent=True) or {}; username = (data.get("username") or "").strip()[:100]; password = data.get("password") or ""; role = data.get("role", "viewer")
-    if role not in {"admin", "viewer"} or not username: return jsonify({"success": False, "error": "נתוני משתמש שגויים"}), 400
+    if role not in {"admin", "editor", "viewer"} or not username: return jsonify({"success": False, "error": "נתוני משתמש שגויים"}), 400
     if password and len(password) < 8: return jsonify({"success": False, "error": "סיסמה חייבת להכיל לפחות 8 תווים"}), 400
     try:
         u = User.query.filter_by(username=username).first()
