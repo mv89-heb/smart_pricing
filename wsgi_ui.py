@@ -184,7 +184,6 @@ def _inject_period_report(response):
             '<script src="/static/mobile-product-picker.js?v=2" defer></script>',
             '<script src="/static/ui-stability.js?v=3" defer></script>',
             '<script src="/static/app-shell-stability.js?v=3" defer></script>',
-            '<script src="/static/app-shell-stability.js?v=3" defer></script>',
             '<script src="/static/report-sort.js?v=1" defer></script>',
             '<script src="/static/system-health.js?v=1" defer></script>',
         ]
