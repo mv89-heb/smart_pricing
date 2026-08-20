@@ -37,6 +37,19 @@ def test_production_entrypoint_exposes_dashboard_page():
     assert "/dashboard" in rules
 
 
+def test_dashboard_ui_injects_app_shell_stability_once():
+    client = production.app.test_client()
+    with client.session_transaction() as session:
+        session["logged_in"] = True
+        session["username"] = "admin"
+        session["role"] = "admin"
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    marker = '/static/app-shell-stability.js?v=3'
+    assert body.count(marker) == 1
+
+
 def test_production_entrypoint_exposes_health_endpoint():
     response = production.app.test_client().get("/health")
     assert response.status_code == 200
