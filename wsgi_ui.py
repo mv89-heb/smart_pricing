@@ -93,7 +93,7 @@ def _inject_period_report(response):
             '<script src="/static/period-report-loader.js?v=1" defer></script>',
             '<script src="/static/password-reset.js?v=1" defer></script>',
             '<script src="/static/global-filters.js?v=1" defer></script>',
-            '<script src="/static/browser-price-sync.js?v=1" defer></script>',
+            '<script src="/static/browser-price-sync.js?v=2" defer></script>',
         ]:
             if script not in body and marker in body: body=body.replace(marker,script+marker,1)
         response.set_data(body); response.headers["Cache-Control"]="no-store, max-age=0"
