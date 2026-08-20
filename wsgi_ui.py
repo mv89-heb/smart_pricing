@@ -1,9 +1,11 @@
-"""Production entrypoint with UI helpers and admin password reset."""
-
+"""Production entrypoint with UI helpers, password reset and AI price discovery."""
+import os
+from datetime import datetime
 import app as base
 from flask import jsonify, request
 from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import SQLAlchemyError
+from services.ai_price_search import search_product_price
 
 app = base.app
 User = base.User
@@ -18,22 +20,16 @@ except Exception:
 
 @app.post("/api/users/<int:user_id>/reset-password")
 def reset_user_password(user_id):
-    """Allow an authenticated admin to set a user's password."""
     denied = admin_access()
-    if denied:
-        return denied
-
+    if denied: return denied
     data = request.get_json(silent=True) or {}
     password = data.get("password") or ""
     if not isinstance(password, str) or len(password) < 8:
         return jsonify({"success": False, "error": "סיסמה חייבת להכיל לפחות 8 תווים"}), 400
     if len(password) > 128:
         return jsonify({"success": False, "error": "סיסמה ארוכה מדי"}), 400
-
     user = User.query.get(user_id)
-    if not user:
-        return jsonify({"success": False, "error": "המשתמש לא נמצא"}), 404
-
+    if not user: return jsonify({"success": False, "error": "המשתמש לא נמצא"}), 404
     try:
         user.password = generate_password_hash(password)
         base.db.session.commit()
@@ -44,10 +40,71 @@ def reset_user_password(user_id):
         return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 
+@app.get("/api/ai-price-sync/status")
+def ai_price_sync_status():
+    denied = admin_access()
+    if denied: return denied
+    return jsonify({"configured": bool(os.environ.get("GEMINI_API_KEY")), "model": os.environ.get("GEMINI_PRICE_MODEL", "gemini-3.6-flash")})
+
+
+@app.post("/api/ai-price-sync/search")
+def ai_price_sync_search():
+    denied = admin_access()
+    if denied: return denied
+    if not os.environ.get("GEMINI_API_KEY"):
+        return jsonify({"success": False, "error": "GEMINI_API_KEY לא מוגדר ב-Render"}), 503
+    data = request.get_json(silent=True) or {}
+    products = data.get("products")
+    if not isinstance(products, list) or not products:
+        return jsonify({"success": False, "error": "לא נבחרו מוצרים"}), 400
+    if len(products) > 100:
+        return jsonify({"success": False, "error": "ניתן לבדוק עד 100 מוצרים בפעולה אחת"}), 400
+    results = []
+    for item in products:
+        name = str(item.get("name") or "").strip()[:100]
+        if not name: continue
+        current = float(item.get("current_price") or 0)
+        tag = str(item.get("tag") or "").strip()[:80]
+        try:
+            found = search_product_price(name, tag)
+            results.append({"name": name, "current_price": current, **found})
+        except Exception as exc:
+            results.append({"name": name, "current_price": current, "found": False, "confidence": 0, "error": str(exc)[:300]})
+    return jsonify({"success": True, "results": results})
+
+
+@app.post("/api/ai-price-sync/apply")
+def ai_price_sync_apply():
+    denied = admin_access()
+    if denied: return denied
+    data = request.get_json(silent=True) or {}
+    updates = data.get("updates")
+    effective_from = data.get("effective_from")
+    if not isinstance(updates, list) or not updates: return jsonify({"success": False, "error": "אין עדכונים"}), 400
+    if not isinstance(effective_from, str) or len(effective_from) != 10:
+        return jsonify({"success": False, "error": "תאריך תוקף לא תקין"}), 400
+    try: datetime.strptime(effective_from, "%Y-%m-%d")
+    except ValueError: return jsonify({"success": False, "error": "תאריך תוקף לא תקין"}), 400
+    applied = []
+    for item in updates[:100]:
+        name = str(item.get("name") or "").strip()[:100]
+        try: price = float(item.get("price"))
+        except (TypeError, ValueError): continue
+        if not name or price <= 0: continue
+        product = base.Product.query.filter_by(name=name).first()
+        if not product: continue
+        product.price = base.money(price)
+        history = base.PriceHistory(product_id=product.id, price=base.money(price), effective_from=effective_from, changed_by=session.get("username", "AI"))
+        base.db.session.add(history)
+        applied.append({"name": name, "price": round(price, 2)})
+    base.db.session.commit()
+    log_activity("AI_PRICE_SYNC_APPLIED", f"עודכנו {len(applied)} מוצרים באמצעות Google AI")
+    return jsonify({"success": True, "applied": applied})
+
+
 def _inject_period_report(response):
     content_type = response.headers.get("Content-Type", "")
-    if "text/html" not in content_type:
-        return response
+    if "text/html" not in content_type: return response
     try:
         body = response.get_data(as_text=True)
         marker = "</body>"
@@ -55,15 +112,13 @@ def _inject_period_report(response):
             '<script src="/static/period-report-loader.js?v=1" defer></script>',
             '<script src="/static/password-reset.js?v=1" defer></script>',
             '<script src="/static/global-filters.js?v=1" defer></script>',
+            '<script src="/static/ai-price-sync.js?v=1" defer></script>',
         ]
         for script in scripts:
-            if script not in body and marker in body:
-                body = body.replace(marker, script + marker, 1)
+            if script not in body and marker in body: body = body.replace(marker, script + marker, 1)
         response.set_data(body)
         response.headers["Cache-Control"] = "no-store, max-age=0"
-    except Exception:
-        pass
+    except Exception: pass
     return response
-
 
 app.after_request(_inject_period_report)
