@@ -1,6 +1,6 @@
 """Core API routes for Smart Pricing.
 
-This module owns the application's business API routes.  Production-specific
+This module owns the application's business API routes. Production-specific
 composition is intentionally kept outside this module so importing the routes
 does not implicitly import other WSGI layers.
 """
@@ -10,6 +10,8 @@ from decimal import Decimal
 import app as base
 from flask import jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
+
+from services.reporting import compare_periods, period_report
 
 app = base.app
 db = base.db
@@ -44,30 +46,7 @@ def _entry_payload(entry):
 
 
 def _period_payload(start, end):
-    entries = (DailyEntry.query.filter(DailyEntry.date >= start, DailyEntry.date <= end)
-               .order_by(DailyEntry.date.asc(), DailyEntry.id.asc()).all())
-    regular = extra = 0.0
-    products = {}
-    days = {}
-    payload_entries = []
-    for entry in entries:
-        amount = float((base.money(entry.quantity) * base.money(entry.unit_price)).quantize(Decimal("0.01")))
-        if entry.is_extra:
-            extra += amount
-        else:
-            regular += amount
-        product = products.setdefault(entry.product_name, {"quantity": 0.0, "total": 0.0})
-        product["quantity"] += float(entry.quantity or 0)
-        product["total"] += amount
-        day = days.setdefault(entry.date, {"regular": 0.0, "extra": 0.0, "total": 0.0})
-        day["extra" if entry.is_extra else "regular"] += amount
-        day["total"] += amount
-        payload_entries.append(_entry_payload(entry))
-    grand = regular + extra
-    return {"from": start, "to": end, "entries": payload_entries,
-            "summary": {"regular_total": regular, "extra_total": extra, "grand_total": grand,
-                        "days_count": len(days), "average_day": grand / len(days) if days else 0.0},
-            "product_summary": products, "day_summary": days}
+    return period_report(base, start, end)
 
 
 def _valid_range(start, end):
@@ -209,18 +188,7 @@ def get_period_report():
 
 
 def _compare_payload(a_from, a_to, b_from, b_to):
-    a = _period_payload(a_from, a_to)["summary"]
-    b = _period_payload(b_from, b_to)["summary"]
-
-    def pct(old, new):
-        return None if old == 0 else round((new - old) / old * 100, 2)
-
-    return {"a": a, "b": b, "change": {
-        "grand_total": pct(a["grand_total"], b["grand_total"]),
-        "regular_total": pct(a["regular_total"], b["regular_total"]),
-        "extra_total": pct(a["extra_total"], b["extra_total"]),
-        "days_count": pct(a["days_count"], b["days_count"]),
-    }}
+    return compare_periods(base, a_from, a_to, b_from, b_to)
 
 
 @app.route("/api/report/compare", methods=["GET"])
