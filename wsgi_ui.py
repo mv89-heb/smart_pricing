@@ -25,7 +25,7 @@ def system_health():
     required = ["product", "daily_entry", "price_history", "period_lock", "activity_log", "user", "billing_template", "billing_template_item"]
     try:
         inspector = base.db.inspect(base.db.engine)
-        existing = {item["name"] for item in inspector.get_table_names() and inspector.get_table_names()}
+        existing = set(inspector.get_table_names())
         missing = [table for table in required if table not in existing]
         if missing:
             return jsonify({"ok": False, "error": "מסד הנתונים אינו מעודכן", "database": base.db.engine.name, "tables_checked": len(required), "missing": missing}), 503
