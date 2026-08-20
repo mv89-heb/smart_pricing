@@ -1,6 +1,6 @@
 """Production entrypoint with UI helpers and admin password reset."""
 
-import wsgi as base
+import app as base
 from flask import jsonify, request
 from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,6 +9,13 @@ app = base.app
 User = base.User
 admin_access = base.admin_access
 log_activity = base.log_activity
+
+# Keep the performance/report layer from wsgi.py while exposing the models
+# directly from app.py.  wsgi.py does not re-export every model.
+try:
+    import wsgi as performance
+except Exception:
+    performance = None
 
 
 @app.post("/api/users/<int:user_id>/reset-password")
@@ -31,8 +38,7 @@ def reset_user_password(user_id):
 
     try:
         user.password = generate_password_hash(password)
-        db = base.db
-        db.session.commit()
+        base.db.session.commit()
         log_activity("USER_PASSWORD_RESET", f"איפוס סיסמה למשתמש: {user.username}")
         return jsonify({"success": True, "username": user.username})
     except SQLAlchemyError:
