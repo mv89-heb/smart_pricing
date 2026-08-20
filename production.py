@@ -1,15 +1,15 @@
 """Single explicit production entrypoint for Smart Pricing.
 
-The legacy WSGI modules remain importable for compatibility/tests, but the
-production server now has one documented composition root.  API routes are
-registered first; UI/admin helpers and the performance layer are then loaded
-explicitly rather than through an import side effect inside api_routes.py.
+Composition order is deliberate:
+1. core API routes
+2. UI/admin extensions
+3. WSGI infrastructure (health middleware + safe indexes)
+
+No application module imports another WSGI layer implicitly.
 """
 
-# Register the core API routes first.
 import api_routes  # noqa: F401,E402
-
-# Load the existing UI/admin extensions and performance layer explicitly.
 import wsgi_ui  # noqa: F401,E402
+import wsgi as infrastructure  # noqa: F401,E402
 
 app = wsgi_ui.app
