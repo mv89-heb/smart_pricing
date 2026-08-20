@@ -1,9 +1,11 @@
 """Compatibility endpoints retained from the legacy WSGI layer.
 
-These routes are intentionally small adapters around the canonical reporting
-service. Keeping them here preserves old integrations without restoring the
-legacy runtime monkey-patching that previously lived in ``wsgi_patched.py``.
+These routes are intentionally small adapters around canonical services. They
+preserve older frontend/integration URLs without restoring the legacy runtime
+monkey-patching that previously lived in ``wsgi_patched.py``.
 """
+from datetime import datetime, timezone
+
 from flask import jsonify
 
 import app as base
@@ -12,6 +14,7 @@ from services.reporting import period_report
 app = base.app
 DailyEntry = base.DailyEntry
 Product = base.Product
+PeriodLock = base.PeriodLock
 
 
 @app.get("/api/report/all")
@@ -40,3 +43,59 @@ def data_health():
         })
     except Exception:
         return jsonify({"error": "נתוני המערכת אינם זמינים"}), 503
+
+
+def _period_lock_payload(year_month):
+    row = PeriodLock.query.filter_by(year_month=year_month).first()
+    return {
+        "year_month": year_month,
+        "locked": bool(row and row.locked),
+        "locked_at": row.locked_at.isoformat() if row and row.locked_at else None,
+    }
+
+
+# Legacy dashboard compatibility: the existing dashboard uses /api/period-locks/*.
+# The canonical API uses /api/periods/*; these adapters preserve the existing UI
+# contract while delegating to the same PeriodLock model and write policy.
+@app.get("/api/period-locks/<string:year_month>")
+def legacy_period_lock_status(year_month):
+    if not base.valid_month(year_month):
+        return jsonify({"error": "חודש לא תקין"}), 400
+    return jsonify(_period_lock_payload(year_month))
+
+
+@app.post("/api/period-locks/<string:year_month>")
+def legacy_period_lock_lock(year_month):
+    denied = base.write_access()
+    if denied:
+        return denied
+    if not base.valid_month(year_month):
+        return jsonify({"success": False, "error": "חודש לא תקין"}), 400
+    row = PeriodLock.query.filter_by(year_month=year_month).first()
+    now = datetime.now(timezone.utc)
+    if row is None:
+        row = PeriodLock(year_month=year_month, locked=True, locked_at=now, locked_by="מערכת")
+        base.db.session.add(row)
+    else:
+        row.locked = True
+        row.locked_at = now
+        row.locked_by = "מערכת"
+    base.db.session.commit()
+    return jsonify({"success": True, "year_month": year_month, "locked": True})
+
+
+@app.delete("/api/period-locks/<string:year_month>")
+def legacy_period_lock_unlock(year_month):
+    denied = base.write_access()
+    if denied:
+        return denied
+    if not base.valid_month(year_month):
+        return jsonify({"success": False, "error": "חודש לא תקין"}), 400
+    row = PeriodLock.query.filter_by(year_month=year_month).first()
+    if row is None:
+        row = PeriodLock(year_month=year_month, locked=False)
+        base.db.session.add(row)
+    else:
+        row.locked = False
+    base.db.session.commit()
+    return jsonify({"success": True, "year_month": year_month, "locked": False})
