@@ -32,24 +32,24 @@ def test_future_price_does_not_change_existing_or_current_price(client):
     created = client.post("/api/products", json={"name": "קולה", "price": 8, "effective_from": "2026-08-01"}, headers=JSON_HEADERS)
     assert created.status_code == 200
 
-    scheduled = client.put("/api/products/%D7%A7%D7%95%D7%9C%D7%94", json={"name": "קולה", "price": 9, "effective_from": "2026-08-15"}, headers=JSON_HEADERS)
+    scheduled = client.put("/api/products/%D7%A7%D7%95%D7%9C%D7%94", json={"name": "קולה", "price": 9, "effective_from": "2099-01-01"}, headers=JSON_HEADERS)
     assert scheduled.status_code == 200
 
     with app.app_context():
         product = Product.query.filter_by(name="קולה").first()
         assert float(product.price) == 8.0
         rows = PriceHistory.query.filter_by(product_id=product.id).order_by(PriceHistory.effective_from.asc()).all()
-        assert [(r.effective_from, float(r.price)) for r in rows] == [("2026-08-01", 8.0), ("2026-08-15", 9.0)]
+        assert [(r.effective_from, float(r.price)) for r in rows] == [("2026-08-01", 8.0), ("2099-01-01", 9.0)]
 
-    before = client.post("/api/entries", json={"date": "2026-08-14", "product_name": "קולה", "quantity": 2, "is_extra": False}, headers=JSON_HEADERS)
-    after = client.post("/api/entries", json={"date": "2026-08-15", "product_name": "קולה", "quantity": 2, "is_extra": False}, headers=JSON_HEADERS)
+    before = client.post("/api/entries", json={"date": "2098-12-31", "product_name": "קולה", "quantity": 2, "is_extra": False}, headers=JSON_HEADERS)
+    after = client.post("/api/entries", json={"date": "2099-01-01", "product_name": "קולה", "quantity": 2, "is_extra": False}, headers=JSON_HEADERS)
     assert before.status_code == 200
     assert after.status_code == 200
     assert before.get_json()["unit_price"] == 8.0
     assert after.get_json()["unit_price"] == 9.0
 
-    old_entry = client.get("/api/entries/2026-08-14").get_json()[0]
-    new_entry = client.get("/api/entries/2026-08-15").get_json()[0]
+    old_entry = client.get("/api/entries/2098-12-31").get_json()[0]
+    new_entry = client.get("/api/entries/2099-01-01").get_json()[0]
     assert old_entry["unit_price"] == 8.0
     assert old_entry["total_amount"] == 16.0
     assert new_entry["unit_price"] == 9.0
@@ -58,7 +58,7 @@ def test_future_price_does_not_change_existing_or_current_price(client):
 
 def test_cancel_future_prices(client):
     client.post("/api/products", json={"name": "מיץ", "price": 5, "effective_from": "2026-08-01"}, headers=JSON_HEADERS)
-    client.put("/api/products/%D7%9E%D7%99%D7%A5", json={"name": "מיץ", "price": 7, "effective_from": "2026-08-20"}, headers=JSON_HEADERS)
+    client.put("/api/products/%D7%9E%D7%99%D7%A5", json={"name": "מיץ", "price": 7, "effective_from": "2099-01-01"}, headers=JSON_HEADERS)
     response = client.delete("/api/products/%D7%9E%D7%99%D7%A5/scheduled", headers=JSON_HEADERS)
     assert response.status_code == 200
     assert response.get_json()["cancelled"] == 1
@@ -66,4 +66,4 @@ def test_cancel_future_prices(client):
     with app.app_context():
         product = Product.query.filter_by(name="מיץ").first()
         rows = PriceHistory.query.filter_by(product_id=product.id).all()
-        assert all(r.effective_from <= "2026-08-11" for r in rows)
+        assert [(r.effective_from, float(r.price)) for r in rows] == [("2026-08-01", 5.0)]
