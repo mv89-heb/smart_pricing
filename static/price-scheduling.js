@@ -1,36 +1,173 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
-  const esc = s => String(s ?? '').replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));
-  async function api(url, options = {}) { options.credentials='same-origin'; options.headers={...(options.headers||{})}; if(['POST','PUT','PATCH','DELETE'].includes((options.method||'GET').toUpperCase())) options.headers['X-Requested-With']='XMLHttpRequest'; try { const r=await fetch(url,options); if(r.status===401){location.href='/login';return null;} return r; } catch(_){ toast('שגיאת תקשורת עם השרת','error'); return null; } }
-  function toast(message,type='success'){ if(typeof window.showToast==='function') return window.showToast(message,type); const old=$('price-schedule-toast'); if(old)old.remove(); const el=document.createElement('div'); el.id='price-schedule-toast'; el.className=`fixed top-24 left-4 z-[10000] px-4 py-3 rounded-xl shadow-xl text-sm font-bold text-white ${type==='error'?'bg-rose-600':'bg-slate-900'}`; el.textContent=message; document.body.appendChild(el); setTimeout(()=>el.remove(),3000); }
+  const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const api = async (url, options = {}) => {
+    options.credentials = 'same-origin';
+    options.headers = { ...(options.headers || {}) };
+    if (['POST','PUT','PATCH','DELETE'].includes((options.method || 'GET').toUpperCase())) options.headers['X-Requested-With'] = 'XMLHttpRequest';
+    try {
+      const r = await fetch(url, options);
+      if (r.status === 401) { location.href = '/login'; return null; }
+      return r;
+    } catch (_) { toast('שגיאת תקשורת עם השרת', 'error'); return null; }
+  };
+  const toast = (message, type = 'success') => {
+    if (typeof window.showToast === 'function') return window.showToast(message, type);
+    const old = $('price-schedule-toast'); if (old) old.remove();
+    const el = document.createElement('div'); el.id = 'price-schedule-toast';
+    el.className = `fixed top-24 left-4 z-[10000] px-4 py-3 rounded-xl shadow-xl text-sm font-bold text-white ${type === 'error' ? 'bg-rose-600' : 'bg-slate-900'}`;
+    el.textContent = message; document.body.appendChild(el); setTimeout(() => el.remove(), 3000);
+  };
 
-  function installWorkspaceCss(){if($('billing-workspace-css'))return;const s=document.createElement('style');s.id='billing-workspace-css';s.textContent=`.billing-workspace-hidden{display:none!important}main>.grid.billing-workspace-full{display:grid!important;grid-column:1/-1!important;width:100%!important}main>.grid.billing-workspace-full>#left-panel,main>.grid.billing-workspace-full>#right-panel{width:100%!important;grid-column:1/-1!important}`;document.head.appendChild(s);}
-  function setHidden(el,hidden){if(!el)return;el.classList.toggle('billing-workspace-hidden',hidden);el.classList.remove('ux-hidden');if(hidden)el.classList.add('billing-workspace-hidden');}
-  function setWorkspace(view,options={}){installWorkspaceCss();const dashboard=$('ux-dashboard'),grid=document.querySelector('main>.grid'),daily=$('left-panel'),pricing=$('right-panel');if(!grid||!daily||!pricing)return false;if(view==='dashboard'){setHidden(dashboard,false);setHidden(grid,true);grid.classList.remove('billing-workspace-full');}else if(view==='daily'||view==='pricing'){setHidden(dashboard,true);setHidden(grid,false);grid.classList.add('billing-workspace-full');setHidden(daily,view!=='daily');setHidden(pricing,view!=='pricing');}else return false;document.querySelectorAll('#ux-shell-nav [data-v]').forEach(btn=>btn.classList.toggle('active',btn.dataset.v===view));if(!options.skipLoad){if(view==='daily'&&typeof window.loadEntries==='function'){try{window.loadEntries();}catch(_){}}if(view==='pricing'){if(typeof window.loadProducts==='function'){try{window.loadProducts();}catch(_){} }refreshScheduledPanel();}}window.scrollTo({top:0,behavior:'smooth'});return true;}
-  function installWorkspaceNavigation(){const nav=$('ux-shell-nav');if(!nav||nav.dataset.workspaceFixed==='1')return;nav.dataset.workspaceFixed='1';nav.addEventListener('click',event=>{const btn=event.target.closest('[data-v]');if(!btn)return;const view=btn.dataset.v;if(!['dashboard','daily','pricing'].includes(view))return;event.preventDefault();event.stopImmediatePropagation();setWorkspace(view);},true);if($('ux-dashboard'))setWorkspace('dashboard',{skipLoad:true});}
+  const priceCache = new Map();
+  let priceRequestToken = 0;
+  const invalidatePriceCache = () => priceCache.clear();
 
-  function inject(){
-    const form=$('product-form');if(!form||$('prod-effective-from'))return;
-    const wrap=document.createElement('div');wrap.className='rounded-lg border border-indigo-100 dark:border-slate-700 bg-indigo-50/50 dark:bg-indigo-950/20 p-3';
-    wrap.innerHTML=`<div class="flex items-center justify-between gap-2"><div class="flex-1"><label class="block text-xs font-bold text-indigo-700 dark:text-indigo-300 mb-1">תאריך תוקף לעדכוני המחירון</label><input type="date" id="prod-effective-from" class="w-full px-3 py-2 border border-indigo-200 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white dark:bg-slate-900 dark:text-white"><p class="text-[11px] text-slate-500 mt-1">מגדירים פעם אחת. התאריך נשמר וישמש את כל עדכוני המוצרים הבאים.</p></div><button type="button" id="remember-effective-date" class="self-end px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold whitespace-nowrap">קבע לכל המוצרים</button></div>`;
-    const tag=$('prod-tag')?.parentElement?.parentElement;if(tag)tag.insertAdjacentElement('afterend',wrap);else form.insertBefore(wrap,form.lastElementChild);
-    const saved=localStorage.getItem('global_price_effective_from')||today();$('prod-effective-from').value=saved;
-    $('remember-effective-date').addEventListener('click',()=>{const d=$('prod-effective-from').value;if(!d)return toast('יש לבחור תאריך תוקף','error');localStorage.setItem('global_price_effective_from',d);toast(`תאריך ${d.split('-').reverse().join('/')} נקבע כברירת המחדל לכל המוצרים`);});
-    const info=document.createElement('div');info.id='scheduled-price-panel';info.className='px-4 pb-3';form.insertAdjacentElement('afterend',info);refreshScheduledPanel();
+  function installEffectiveDate() {
+    const form = $('product-form');
+    if (!form || $('prod-effective-from')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'global-effective-date-wrap';
+    wrap.className = 'rounded-lg border border-indigo-100 dark:border-slate-700 bg-indigo-50/50 dark:bg-indigo-950/20 p-3 mt-3';
+    wrap.innerHTML = `<div class="flex flex-col sm:flex-row sm:items-end gap-2"><div class="flex-1"><label for="prod-effective-from" class="block text-xs font-bold text-indigo-700 dark:text-indigo-300 mb-1">תאריך תוקף לעדכוני המחירון</label><input type="date" id="prod-effective-from" class="w-full px-3 py-2 border border-indigo-200 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white dark:bg-slate-900 dark:text-white"><p class="text-[11px] text-slate-500 mt-1">מגדירים פעם אחת והתאריך נשמר כברירת המחדל לכל המוצרים.</p></div><button type="button" id="remember-effective-date" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">קבע כברירת מחדל</button></div>`;
+    const anchor = $('prod-tag')?.closest('.space-y-3') || $('prod-tag')?.parentElement;
+    if (anchor?.parentElement) anchor.parentElement.insertBefore(wrap, anchor.nextSibling); else form.insertBefore(wrap, form.lastElementChild);
+    $('prod-effective-from').value = localStorage.getItem('global_price_effective_from') || today();
+    $('prod-effective-from').addEventListener('change', () => localStorage.setItem('global_price_effective_from', $('prod-effective-from').value));
+    $('remember-effective-date').addEventListener('click', () => {
+      const value = $('prod-effective-from').value;
+      if (!value) return toast('בחר תאריך תוקף', 'error');
+      localStorage.setItem('global_price_effective_from', value);
+      toast(`תאריך ${value.split('-').reverse().join('/')} נשמר כברירת המחדל`);
+    });
   }
-  async function refreshScheduledPanel(){const panel=$('scheduled-price-panel');if(!panel)return;const r=await api('/api/products/details');if(!r||!r.ok)return;const products=await r.json().catch(()=>[]);const scheduled=products.filter(p=>p.scheduled_price);if(!scheduled.length){panel.innerHTML='';return;}panel.innerHTML=`<div class="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 p-3"><div class="text-xs font-extrabold text-amber-700 dark:text-amber-300 mb-2">מחירים מתוזמנים</div><div class="space-y-2">${scheduled.map(p=>`<div class="flex items-center justify-between gap-2 text-xs"><div><span class="font-bold">${esc(p.name)}</span><span class="text-slate-500 mr-2">₪${Number(p.scheduled_price.price).toFixed(2)} מ-${esc(p.scheduled_price.effective_from.split('-').reverse().join('/'))}</span></div><button type="button" class="cancel-scheduled-price text-rose-600 font-bold hover:underline" data-name="${esc(p.name)}">בטל</button></div>`).join('')}</div></div>`;panel.querySelectorAll('.cancel-scheduled-price').forEach(btn=>btn.addEventListener('click',async()=>{if(!confirm(`לבטל את כל המחירים העתידיים עבור ${btn.dataset.name}?`))return;const res=await api(`/api/products/${encodeURIComponent(btn.dataset.name)}/scheduled`,{method:'DELETE'});if(res&&res.ok){toast('המחיר העתידי בוטל');refreshScheduledPanel();if(typeof window.loadProducts==='function')window.loadProducts();invalidatePriceCache();}else toast('לא ניתן לבטל את המחיר העתידי','error');}));}
 
-  function installSubmitGuard(){const form=$('product-form');if(!form||form.dataset.scheduleGuard==='1')return;form.dataset.scheduleGuard='1';form.addEventListener('submit',async event=>{event.preventDefault();event.stopImmediatePropagation();const name=($('prod-name')?.value||'').trim(),price=$('prod-price')?.value,tag=($('prod-tag')?.value||'').trim(),effective=$('prod-effective-from')?.value||localStorage.getItem('global_price_effective_from')||today(),original=($('prod-edit-original-name')?.value||'').trim();if(!name||price===''||!effective){toast('יש למלא מוצר, מחיר ותאריך','error');return;}localStorage.setItem('global_price_effective_from',effective);const editing=Boolean(original),url=editing?`/api/products/${encodeURIComponent(original)}`:'/api/products',method=editing?'PUT':'POST';const res=await api(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify({name,price:Number(price),tag,effective_from:effective})});const data=res?await res.json().catch(()=>({})):{};if(res&&res.ok){toast(effective>today()?`מחיר ₪${Number(price).toFixed(2)} תוזמן ל-${effective.split('-').reverse().join('/')}`:'המחיר עודכן');if($('prod-effective-from'))$('prod-effective-from').value=effective;if(typeof window.cancelProductEdit==='function')window.cancelProductEdit();if($('prod-effective-from'))$('prod-effective-from').value=effective;invalidatePriceCache();if(typeof window.loadProducts==='function')await window.loadProducts();refreshScheduledPanel();}else toast(data.error||'שגיאה בעדכון המחיר','error');},true);}
+  async function refreshScheduledPanel() {
+    const form = $('product-form'); if (!form || !$('right-panel')) return;
+    let panel = $('scheduled-price-panel');
+    if (!panel) { panel = document.createElement('div'); panel.id = 'scheduled-price-panel'; panel.className = 'px-4 pb-3'; form.insertAdjacentElement('afterend', panel); }
+    const r = await api('/api/products/details'); if (!r || !r.ok) return;
+    const products = await r.json().catch(() => []);
+    const scheduled = products.filter(p => p.scheduled_price);
+    if (!scheduled.length) { panel.innerHTML = ''; return; }
+    panel.innerHTML = `<div class="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 p-3"><div class="text-xs font-extrabold text-amber-700 dark:text-amber-300 mb-2">מחירים מתוזמנים</div><div class="space-y-2">${scheduled.map(p => `<div class="flex items-center justify-between gap-2 text-xs"><div><span class="font-bold">${esc(p.name)}</span><span class="text-slate-500 mr-2">₪${Number(p.scheduled_price.price).toFixed(2)} מ-${esc(p.scheduled_price.effective_from.split('-').reverse().join('/'))}</span></div><button type="button" class="cancel-scheduled-price text-rose-600 font-bold hover:underline" data-name="${esc(p.name)}">בטל</button></div>`).join('')}</div></div>`;
+    panel.querySelectorAll('.cancel-scheduled-price').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm(`לבטל את כל המחירים העתידיים עבור ${btn.dataset.name}?`)) return;
+      const res = await api(`/api/products/${encodeURIComponent(btn.dataset.name)}/scheduled`, { method: 'DELETE' });
+      if (res && res.ok) { toast('המחיר העתידי בוטל'); invalidatePriceCache(); await refreshScheduledPanel(); if (typeof window.loadProducts === 'function') await window.loadProducts(); }
+      else toast('לא ניתן לבטל את המחיר העתידי', 'error');
+    }));
+  }
 
-  const priceCache=new Map();let priceRequestToken=0;function invalidatePriceCache(){priceCache.clear();}function selectedBillingDate(){return $('current-date')?.value||today();}
-  async function getEffectivePrice(productName,date){const key=`${productName}@@${date}`;if(priceCache.has(key))return priceCache.get(key);const res=await api(`/api/products/${encodeURIComponent(productName)}/history`);if(!res||!res.ok)return null;const rows=await res.json().catch(()=>[]);const valid=Array.isArray(rows)?rows.filter(row=>row&&row.effective_from&&row.effective_from<=date):[];if(!valid.length){const fallback=Number(window.products?.[productName]);return Number.isFinite(fallback)?fallback:null;}valid.sort((a,b)=>a.effective_from!==b.effective_from?a.effective_from.localeCompare(b.effective_from):Number(a.id||0)-Number(b.id||0));const result=Number(valid[valid.length-1].price);if(Number.isFinite(result))priceCache.set(key,result);return Number.isFinite(result)?result:null;}
-  function evaluatedQuantity(){const raw=($('entry-qty')?.value||'1').trim();if(!/^[\d\.\+\-\*\/\(\)\s]+$/.test(raw))return 0;try{const value=Function('"use strict";return ('+raw+')')();return Number.isFinite(value)&&value>0?value:0;}catch(_){return 0;}}
-  window.updateLivePreview=async function(){const productName=$('entry-prod-select-ui')?.value,qty=evaluatedQuantity(),box=$('live-preview-box');if(!box)return;const token=++priceRequestToken;if(!productName||qty<=0){box.textContent='';return;}box.textContent='מעדכן מחיר...';const price=await getEffectivePrice(productName,selectedBillingDate());if(token!==priceRequestToken)return;if(price===null){box.textContent='לא ניתן לטעון מחיר';return;}const total=Math.round(price*qty*100)/100;box.textContent=`מחיר ${Number(price).toLocaleString('he-IL',{minimumFractionDigits:2,maximumFractionDigits:2})} ₪ × ${qty} = סה"כ ${Number(total).toLocaleString('he-IL',{minimumFractionDigits:2,maximumFractionDigits:2})} ₪`;};
-  function installDatePriceSync(){const dateInput=$('current-date');if(!dateInput||dateInput.dataset.priceSyncInstalled==='1')return;dateInput.dataset.priceSyncInstalled='1';dateInput.addEventListener('change',()=>{priceRequestToken++;invalidatePriceCache();window.updateLivePreview();},true);const qty=$('entry-qty');if(qty)qty.addEventListener('input',()=>window.updateLivePreview(),true);const select=$('entry-prod-select-ui');if(select)select.addEventListener('change',()=>window.updateLivePreview(),true);if(typeof window.loadEntriesForDate==='function'&&!window.loadEntriesForDate.__priceSyncWrapped){const original=window.loadEntriesForDate;const wrapped=async function(...args){invalidatePriceCache();const result=await original.apply(this,args);window.updateLivePreview();return result;};wrapped.__priceSyncWrapped=true;window.loadEntriesForDate=wrapped;}if(typeof window.loadProducts==='function'&&!window.loadProducts.__priceSyncWrapped){const original=window.loadProducts;const wrapped=async function(...args){invalidatePriceCache();const result=await original.apply(this,args);window.updateLivePreview();return result;};wrapped.__priceSyncWrapped=true;window.loadProducts=wrapped;}}
-  function installBulkPriceFix(){if(typeof window.bulkUpdatePrices!=='function'||window.bulkUpdatePrices.__priceSyncFixed)return;const promptFn=window.customPrompt;const fixed=async function(){if(!window.products||Object.keys(window.products).length===0){toast('המחירון ריק.','error');return;}const percentStr=await promptFn('הזן אחוז לעדכון גורף של כל המחירון (לדוגמה: 5, -5):','','number');if(!percentStr)return;const percent=parseFloat(percentStr);if(!Number.isFinite(percent)){toast('נא להזין מספר תקין','error');return;}if(!confirm(`האם לעדכן את כל ${Object.keys(window.products).length} המוצרים ב-${percent}%?`))return;toast('מעדכן מחירים...','success');let successCount=0;const effective=localStorage.getItem('global_price_effective_from')||today();for(const[name,oldPrice]of Object.entries(window.products)){const newPrice=Math.round(Number(oldPrice)*(1+percent/100)*100)/100;const res=await api(`/api/products/${encodeURIComponent(name)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,price:newPrice,effective_from:effective})});if(res&&res.ok)successCount++;}invalidatePriceCache();toast(`עודכנו ${successCount} מוצרים`);if(typeof window.loadProducts==='function')await window.loadProducts();refreshScheduledPanel();window.updateLivePreview();};fixed.__priceSyncFixed=true;window.bulkUpdatePrices=fixed;}
-  function observe(){const observer=new MutationObserver(()=>{installWorkspaceNavigation();inject();installSubmitGuard();installDatePriceSync();installBulkPriceFix();});observer.observe(document.body,{childList:true,subtree:true});installWorkspaceNavigation();inject();installSubmitGuard();installDatePriceSync();installBulkPriceFix();}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observe);else observe();
-  window.refreshScheduledPrices=refreshScheduledPanel;window.setBillingWorkspace=setWorkspace;
+  function installProductSubmit() {
+    const form = $('product-form'); if (!form || form.dataset.stablePriceSubmit === '1') return;
+    form.dataset.stablePriceSubmit = '1';
+    form.addEventListener('submit', async event => {
+      event.preventDefault(); event.stopImmediatePropagation();
+      const name = ($('prod-name')?.value || '').trim();
+      const price = $('prod-price')?.value;
+      const tag = ($('prod-tag')?.value || '').trim();
+      const original = ($('prod-edit-original-name')?.value || '').trim();
+      const effective = $('prod-effective-from')?.value || localStorage.getItem('global_price_effective_from') || today();
+      if (!name || price === '' || !effective) return toast('יש למלא מוצר, מחיר ותאריך תוקף', 'error');
+      const numericPrice = Number(price);
+      if (!Number.isFinite(numericPrice) || numericPrice < 0) return toast('מחיר לא תקין', 'error');
+      localStorage.setItem('global_price_effective_from', effective);
+      const editing = Boolean(original);
+      const url = editing ? `/api/products/${encodeURIComponent(original)}` : '/api/products';
+      const method = editing ? 'PUT' : 'POST';
+      const res = await api(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, price: numericPrice, tag, effective_from: effective }) });
+      const data = res ? await res.json().catch(() => ({})) : {};
+      if (!res || !res.ok) return toast(data.error || 'שגיאה בשמירת המוצר', 'error');
+      invalidatePriceCache();
+      if (typeof window.cancelProductEdit === 'function') window.cancelProductEdit();
+      if ($('prod-effective-from')) $('prod-effective-from').value = effective;
+      toast(effective > today() ? `המחיר תוזמן ל-${effective.split('-').reverse().join('/')}` : 'המוצר עודכן בהצלחה');
+      if (typeof window.loadProducts === 'function') await window.loadProducts();
+      await refreshScheduledPanel();
+    }, true);
+  }
+
+  async function effectivePrice(name, date) {
+    const key = `${name}@@${date}`;
+    if (priceCache.has(key)) return priceCache.get(key);
+    const r = await api(`/api/products/${encodeURIComponent(name)}/history`); if (!r || !r.ok) return null;
+    const rows = await r.json().catch(() => []);
+    const valid = Array.isArray(rows) ? rows.filter(x => x?.effective_from && x.effective_from <= date) : [];
+    if (!valid.length) return null;
+    valid.sort((a,b) => a.effective_from !== b.effective_from ? a.effective_from.localeCompare(b.effective_from) : Number(a.id || 0) - Number(b.id || 0));
+    const value = Number(valid[valid.length - 1].price);
+    if (!Number.isFinite(value)) return null;
+    priceCache.set(key, value); return value;
+  }
+
+  function quantity() {
+    const raw = ($('entry-qty')?.value || '1').trim();
+    if (!/^[\d\.\+\-\*\/\(\)\s]+$/.test(raw)) return 0;
+    try { const value = Function('"use strict";return (' + raw + ')')(); return Number.isFinite(value) && value > 0 ? value : 0; } catch (_) { return 0; }
+  }
+
+  window.updateLivePreview = async function () {
+    const name = $('entry-prod-select-ui')?.value, qty = quantity(), box = $('live-preview-box');
+    if (!box) return;
+    const token = ++priceRequestToken;
+    if (!name || qty <= 0) { box.textContent = ''; return; }
+    box.textContent = 'מעדכן מחיר...';
+    const date = $('current-date')?.value || today();
+    const price = await effectivePrice(name, date);
+    if (token !== priceRequestToken) return;
+    if (price === null) { box.textContent = 'לא ניתן לטעון מחיר'; return; }
+    box.textContent = `מחיר ${price.toLocaleString('he-IL',{minimumFractionDigits:2,maximumFractionDigits:2})} ₪ × ${qty} = סה"כ ${(Math.round(price * qty * 100) / 100).toLocaleString('he-IL',{minimumFractionDigits:2,maximumFractionDigits:2})} ₪`;
+  };
+
+  function installPreviewSync() {
+    const date = $('current-date'), qty = $('entry-qty'), select = $('entry-prod-select-ui');
+    if (date && date.dataset.stablePriceSync !== '1') { date.dataset.stablePriceSync = '1'; date.addEventListener('change', () => { invalidatePriceCache(); window.updateLivePreview(); }); }
+    if (qty && qty.dataset.stablePriceSync !== '1') { qty.dataset.stablePriceSync = '1'; qty.addEventListener('input', window.updateLivePreview); }
+    if (select && select.dataset.stablePriceSync !== '1') { select.dataset.stablePriceSync = '1'; select.addEventListener('change', window.updateLivePreview); }
+  }
+
+  function installBulkUpdate() {
+    if (typeof window.bulkUpdatePrices !== 'function' || window.bulkUpdatePrices.__stable) return;
+    const original = window.bulkUpdatePrices;
+    window.bulkUpdatePrices = async function () {
+      if (!window.products || !Object.keys(window.products).length) return toast('המחירון ריק', 'error');
+      const promptFn = window.customPrompt;
+      const value = await promptFn('הזן אחוז לעדכון גורף של כל המחירון (לדוגמה: 5, -5):', '', 'number');
+      if (!value) return;
+      const percent = Number(value);
+      if (!Number.isFinite(percent)) return toast('נא להזין מספר תקין', 'error');
+      const names = Object.keys(window.products);
+      if (!confirm(`האם לעדכן את כל ${names.length} המוצרים ב-${percent}%?`)) return;
+      const effective = $('prod-effective-from')?.value || localStorage.getItem('global_price_effective_from') || today();
+      localStorage.setItem('global_price_effective_from', effective);
+      let success = 0;
+      for (const name of names) {
+        const oldPrice = Number(window.products[name]);
+        const newPrice = Math.round(oldPrice * (1 + percent / 100) * 100) / 100;
+        const r = await api(`/api/products/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, price: newPrice, effective_from: effective }) });
+        if (r?.ok) success++;
+      }
+      invalidatePriceCache();
+      toast(`עודכנו ${success} מתוך ${names.length} מוצרים`);
+      if (typeof window.loadProducts === 'function') await window.loadProducts();
+      await refreshScheduledPanel();
+      window.updateLivePreview();
+    };
+    window.bulkUpdatePrices.__stable = true;
+  }
+
+  function init() {
+    installEffectiveDate();
+    installProductSubmit();
+    installPreviewSync();
+    installBulkUpdate();
+    refreshScheduledPanel();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  const observer = new MutationObserver(() => { installEffectiveDate(); installProductSubmit(); installPreviewSync(); installBulkUpdate(); });
+  observer.observe(document.body, { childList: true, subtree: true });
+  window.refreshScheduledPrices = refreshScheduledPanel;
 })();
