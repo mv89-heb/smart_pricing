@@ -7,7 +7,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{DB_FILE.name}"
 os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["FLASK_ENV"] = "development"
 
-from app import app, db, Product, PriceHistory
+from app import app, db, Product, PeriodLock, PriceHistory
 import wsgi_ui  # noqa: F401,E402
 
 
@@ -37,8 +37,14 @@ def test_browser_price_sync_respects_period_lock():
         json={"name": "חלב", "price": 8},
         headers=headers(),
     ).status_code == 200
+
     with app.app_context():
-        before_count = PriceHistory.query.count()
+        product = Product.query.filter_by(name="חלב").one()
+        before_history = [
+            (row.price, row.effective_from)
+            for row in PriceHistory.query.filter_by(product_id=product.id).all()
+        ]
+
     assert client.post("/api/periods/2026-08/lock", headers=headers()).status_code == 200
 
     response = client.post(
@@ -53,9 +59,12 @@ def test_browser_price_sync_respects_period_lock():
     assert response.status_code == 423
     with app.app_context():
         product = Product.query.filter_by(name="חלב").one()
+        after_history = [
+            (row.price, row.effective_from)
+            for row in PriceHistory.query.filter_by(product_id=product.id).all()
+        ]
         assert float(product.price) == 8.0
-        assert PriceHistory.query.count() == before_count
-        assert not PriceHistory.query.filter_by(effective_from="2026-08-20").first()
+        assert after_history == before_history
 
 
 def test_browser_price_sync_applies_valid_update():
@@ -82,5 +91,6 @@ def test_browser_price_sync_applies_valid_update():
     with app.app_context():
         product = Product.query.filter_by(name="לחם").one()
         assert float(product.price) == 8.25
-        history = PriceHistory.query.filter_by(product_id=product.id, effective_from="2026-08-20").one()
-        assert float(history.price) == 8.25
+        rows = PriceHistory.query.filter_by(product_id=product.id).all()
+        assert len(rows) == 1
+        assert float(rows[0].price) == 8.25
