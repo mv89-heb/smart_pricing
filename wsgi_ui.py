@@ -118,7 +118,7 @@ def _inject_period_report(response):
             '<script src="/static/global-filters.js?v=4" defer></script>',
             '<script src="/static/browser-price-sync.js?v=5" defer></script>',
             '<script src="/static/ui-stability.js?v=3" defer></script>',
-            '<script src="/static/app-shell-stability.js?v=2" defer></script>',
+            '<script src="/static/app-shell-stability.js?v=3" defer></script>',
             '<script src="/static/report-sort.js?v=1" defer></script>',
             '<script src="/static/system-health.js?v=1" defer></script>',
         ]
