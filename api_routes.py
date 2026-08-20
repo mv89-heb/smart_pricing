@@ -112,6 +112,9 @@ def cancel_scheduled_prices(product_name):
     today = base.today_iso()
     rows = PriceHistory.query.filter(PriceHistory.product_id == product.id,
                                      PriceHistory.effective_from > today).all()
+    locked_rows = [row for row in rows if row.effective_from and _period_is_locked(row.effective_from)]
+    if locked_rows:
+        return jsonify({"success": False, "error": "לא ניתן לבטל מחירים מתוזמנים בתקופה נעולה"}), 423
     try:
         count = len(rows)
         for row in rows:
@@ -218,7 +221,6 @@ def dashboard_compare():
 
 @app.get("/api/periods/<string:year_month>")
 def get_period_lock(year_month):
-    """Expose read-only lock state so the existing UI can prevent avoidable writes."""
     if not base.valid_month(year_month):
         return jsonify({"error": "חודש לא תקין"}), 400
     row = PeriodLock.query.filter_by(year_month=year_month).first()
@@ -276,6 +278,5 @@ def get_templates():
     })
 
 
-# Compatibility hooks used by the existing frontend/services.
 app.price_for_date = _price_for_date
 app.money = base.money
