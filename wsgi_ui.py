@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import math
 
 import app as base
-from flask import jsonify, request, session
+from flask import jsonify, request, session, render_template
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import generate_password_hash
 
@@ -17,6 +17,12 @@ app = base.app
 User = base.User
 admin_access = base.admin_access
 log_activity = base.log_activity
+
+
+@app.get("/dashboard")
+def dashboard_page():
+    """Serve the existing dashboard UI without changing its frontend contract."""
+    return render_template("dashboard.html")
 
 
 @app.get("/api/system/health")
@@ -177,6 +183,7 @@ def _inject_period_report(response):
             '<script src="/static/browser-price-sync.js?v=6" defer></script>',
             '<script src="/static/mobile-product-picker.js?v=2" defer></script>',
             '<script src="/static/ui-stability.js?v=3" defer></script>',
+            '<script src="/static/app-shell-stability.js?v=3" defer></script>',
             '<script src="/static/app-shell-stability.js?v=3" defer></script>',
             '<script src="/static/report-sort.js?v=1" defer></script>',
             '<script src="/static/system-health.js?v=1" defer></script>',
