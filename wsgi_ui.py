@@ -10,8 +10,6 @@ User = base.User
 admin_access = base.admin_access
 log_activity = base.log_activity
 
-# Keep the performance/report layer from wsgi.py while exposing the models
-# directly from app.py.  wsgi.py does not re-export every model.
 try:
     import wsgi as performance
 except Exception:
@@ -56,6 +54,7 @@ def _inject_period_report(response):
         scripts = [
             '<script src="/static/period-report-loader.js?v=1" defer></script>',
             '<script src="/static/password-reset.js?v=1" defer></script>',
+            '<script src="/static/global-filters.js?v=1" defer></script>',
         ]
         for script in scripts:
             if script not in body and marker in body:
