@@ -32,6 +32,11 @@ def test_production_entrypoint_preserves_dashboard_period_lock_urls():
     assert "/api/period-locks/<string:year_month>" in rules
 
 
+def test_production_entrypoint_exposes_dashboard_page():
+    rules = {rule.rule for rule in production.app.url_map.iter_rules()}
+    assert "/dashboard" in rules
+
+
 def test_production_entrypoint_exposes_health_endpoint():
     response = production.app.test_client().get("/health")
     assert response.status_code == 200
