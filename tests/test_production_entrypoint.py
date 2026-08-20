@@ -23,5 +23,6 @@ def test_production_entrypoint_registers_core_routes():
 
 def test_production_entrypoint_exposes_health_endpoint():
     module = importlib.import_module("production")
-    rules = {rule.rule for rule in module.app.url_map.iter_rules()}
-    assert "/health" in rules
+    response = module.app.test_client().get("/health")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ok"}
