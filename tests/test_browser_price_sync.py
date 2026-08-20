@@ -28,6 +28,27 @@ def setup_function(_):
         db.create_all()
 
 
+def test_period_lock_state_endpoint():
+    client = app.test_client()
+    auth(client)
+
+    response = client.get("/api/periods/2026-08")
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "year_month": "2026-08",
+        "locked": False,
+        "locked_at": None,
+    }
+
+    assert client.post("/api/periods/2026-08/lock", headers=headers()).status_code == 200
+    response = client.get("/api/periods/2026-08")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["year_month"] == "2026-08"
+    assert payload["locked"] is True
+    assert payload["locked_at"]
+
+
 def test_browser_price_sync_respects_period_lock():
     client = app.test_client()
     auth(client)
