@@ -26,7 +26,6 @@ def report_all():
 @app.get("/api/data-health")
 def data_health():
     """Return a non-sensitive summary of whether billing data exists."""
-    entries_count = db_count = None
     try:
         entries_count = DailyEntry.query.count()
         products_count = Product.query.count()
