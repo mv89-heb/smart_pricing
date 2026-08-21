@@ -94,7 +94,7 @@ def test_browser_price_sync_applies_valid_update():
 
     assert client.post(
         "/api/products",
-        json={"name": "לחם", "price": 7.5},
+        json={"name": "לחם", "price": 7.5, "effective_from": "2026-08-20"},
         headers=headers(),
     ).status_code == 200
 
