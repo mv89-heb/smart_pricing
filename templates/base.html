@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}Smart Pricing{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='saas-shell.css') }}?v=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='saas-shell.css') }}?v=2">
   {% block head %}{% endblock %}
 </head>
-<body data-module="{{ active_module|default('daily') }}">
+<body data-module="{{ active_module|default('daily') }}" data-username="{{ session.get('username','')|e }}" data-role="{{ session.get('role','viewer')|e }}">
   <div class="saas-app">
     <aside class="saas-sidebar" id="app-sidebar">
       <div class="saas-brand"><span class="saas-brand-mark"><i class="fa-solid fa-chart-line"></i></span><span>Smart Pricing</span></div>
@@ -27,13 +29,13 @@
       <header class="saas-topbar">
         <button id="sidebar-toggle" class="saas-icon-button mobile-only" aria-label="פתיחת תפריט"><i class="fa-solid fa-bars"></i></button>
         <div><div class="saas-module-kicker">Smart Pricing</div><h1 class="saas-page-title">{{ module_title|default('מערכת ניהול חיובים') }}</h1></div>
-        <div class="saas-top-actions"><span id="shell-user" class="saas-user-badge">טוען...</span><button id="theme-toggle" class="saas-icon-button" title="מצב תצוגה"><i class="fa-solid fa-moon"></i></button><button id="fullscreen-toggle" class="saas-icon-button" title="מסך מלא"><i class="fa-solid fa-expand"></i></button></div>
+        <div class="saas-top-actions"><span id="shell-user" class="saas-user-badge">{{ session.get('username','')|e }} · {% if session.get('role') == 'admin' %}מנהל{% elif session.get('role') == 'editor' %}עורך{% else %}צפייה{% endif %}</span><button id="theme-toggle" class="saas-icon-button" title="מצב תצוגה"><i class="fa-solid fa-moon"></i></button><button id="fullscreen-toggle" class="saas-icon-button" title="מסך מלא"><i class="fa-solid fa-expand"></i></button></div>
       </header>
       <main class="saas-content" id="module-content">{% block content %}{% endblock %}</main>
     </div>
   </div>
   <div id="toast-container" class="saas-toast-container" aria-live="polite"></div>
-  <script src="{{ url_for('static', filename='saas-shell.js') }}?v=1" defer></script>
+  <script src="{{ url_for('static', filename='saas-shell.js') }}?v=2" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -11,7 +11,7 @@ def dashboard_summary():
     end = str(request.args.get("to") or "").strip()
     if not valid_range(start, end):
         return jsonify({"error": "טווח תאריכים לא תקין"}), 400
-    return jsonify(build_period_report(start, end))
+    return jsonify(build_period_report(start, end, include_entries=False))
 
 
 @bp.get("/api/dashboard/compare")

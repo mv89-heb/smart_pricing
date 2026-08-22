@@ -40,8 +40,7 @@ def create_entry():
     try:
         existing = (
             DailyEntry.query.filter_by(date=date_value, product_name=product.name, is_extra=is_extra)
-            .order_by(DailyEntry.id.asc())
-            .first()
+            .order_by(DailyEntry.id.asc()).first()
         )
         if existing is not None:
             effective_price = money(existing.unit_price)
@@ -63,6 +62,64 @@ def create_entry():
         return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 
+@bp.post("/api/entries/copy")
+def copy_entries():
+    """Copy a whole day in one request/transaction instead of one HTTP request per row."""
+    denied = write_access()
+    if denied:
+        return denied
+    data = request.get_json(silent=True) or {}
+    source_date = str(data.get("source_date") or "").strip()
+    target_date = str(data.get("target_date") or "").strip()
+    if not valid_date(source_date) or not valid_date(target_date):
+        return jsonify({"success": False, "error": "תאריך לא תקין"}), 400
+    if is_locked(target_date):
+        return jsonify({"success": False, "error": "תקופת היעד נעולה"}), 423
+    source = DailyEntry.query.filter_by(date=source_date).order_by(DailyEntry.id.asc()).all()
+    if not source:
+        return jsonify({"success": True, "copied": 0})
+
+    names = {e.product_name for e in source}
+    products = {p.name: p for p in Product.query.filter(Product.name.in_(names)).all()}
+    if len(products) != len(names):
+        missing = sorted(names - products.keys())
+        return jsonify({"success": False, "error": f"מוצרים חסרים: {', '.join(missing)}"}), 409
+
+    try:
+        existing_rows = DailyEntry.query.filter_by(date=target_date).all()
+        existing = {(e.product_name, bool(e.is_extra)): e for e in existing_rows}
+        prices = {name: price_for_date(product, target_date) for name, product in products.items()}
+        copied = 0
+        for src in source:
+            key = (src.product_name, bool(src.is_extra))
+            dst = existing.get(key)
+            if dst is not None:
+                dst.quantity = float(dst.quantity or 0) + float(src.quantity or 0)
+                dst.total_amount = (money(dst.quantity) * money(dst.unit_price)).quantize(Decimal("0.01"))
+                if src.note:
+                    dst.note = src.note
+            else:
+                unit_price = prices[src.product_name]
+                dst = DailyEntry(
+                    date=target_date,
+                    product_name=src.product_name,
+                    quantity=float(src.quantity or 0),
+                    is_extra=bool(src.is_extra),
+                    unit_price=unit_price,
+                    total_amount=(money(src.quantity) * unit_price).quantize(Decimal("0.01")),
+                    note=src.note,
+                )
+                db.session.add(dst)
+                existing[key] = dst
+            copied += 1
+        db.session.commit()
+        log_activity("COPY_DAY", f"הועתקו {copied} חיובים מ-{source_date} ל-{target_date}")
+        return jsonify({"success": True, "copied": copied})
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
+
+
 @bp.get("/api/entries/<string:date_value>")
 def get_entries(date_value):
     if not valid_date(date_value):
@@ -72,14 +129,6 @@ def get_entries(date_value):
 
 @bp.route("/api/entries/<int:entry_id>", methods=["PUT"])
 def update_entry(entry_id):
-    """Previously missing - the main screen and the periodic report screen
-    both call PUT /api/entries/<id> to edit a quantity, but no such route
-    existed, so editing an entry from either screen silently failed.
-
-    The periodic report screen's edit dialog also sends `note` and `is_extra`
-    in the same request (see static/periodic_report.html saveEdit()) - both
-    are accepted here too, as optional fields, so that screen's edit dialog
-    isn't silently dropping half of what it submits."""
     denied = write_access()
     if denied:
         return denied
@@ -112,8 +161,6 @@ def update_entry(entry_id):
 
 @bp.route("/api/entries/<int:entry_id>", methods=["DELETE"])
 def delete_entry(entry_id):
-    """Previously missing - see update_entry above; deleting a single entry
-    from either screen silently failed with no backend route to handle it."""
     denied = write_access()
     if denied:
         return denied

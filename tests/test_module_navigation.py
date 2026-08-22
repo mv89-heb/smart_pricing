@@ -65,7 +65,7 @@ def test_pricing_is_not_embedded_in_daily():
 def test_reports_are_server_rendered_as_the_reports_module():
     html=body(app.test_client(),"/periodic-report")
     assert 'id="reportBody"' in html
-    assert '/static/reports-module.js?v=4' in html
+    assert '/static/reports-module.js?v=5' in html
     assert '/static/period-report-loader.js' not in html
     assert '/static/period-report-ui.js' not in html
 
