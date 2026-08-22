@@ -65,10 +65,18 @@
   function setupLegacyPage(active) {
     const root = document.body.firstElementChild; if (!root) return null;
     root.classList.add('module-shell-legacy-root');
+    root.dataset.module = active;
+    if (active === 'reports') {
+      root.id = 'reports-module';
+      root.setAttribute('aria-label', 'מודול דוחות');
+    }
     const frame = document.createElement('div'); frame.className = `module-shell-legacy-page module-shell-${active}-page`;
     const content = document.createElement('div'); content.className = 'module-shell-content module-shell-page-frame';
     const legacyHeader = root.querySelector(':scope > header');
-    if (legacyHeader) legacyHeader.classList.add('module-shell-legacy-header');
+    if (legacyHeader) {
+      legacyHeader.classList.add('module-shell-legacy-header');
+      legacyHeader.remove();
+    }
     frame.appendChild(content); document.body.insertBefore(frame, root); content.appendChild(root); return frame;
   }
 
