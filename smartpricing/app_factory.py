@@ -97,15 +97,19 @@ def create_app():
 
     @app.after_request
     def inject_frontend_assets(response):
-        """Consolidates what was previously wsgi_ui.py's _inject_period_report
-        after_request hook - unchanged behavior, still opt-out via Content-Type."""
+        """Inject shared UX assets into every HTML workspace without changing
+        the existing feature scripts or module-specific markup."""
         if "text/html" not in response.headers.get("Content-Type", ""):
             return response
         try:
             body = response.get_data(as_text=True)
-            head_assets = '<link rel="stylesheet" href="/static/responsive-layout.css?v=1">'
-            if head_assets not in body and "</head>" in body:
-                body = body.replace("</head>", head_assets + "</head>", 1)
+            head_assets = [
+                '<link rel="stylesheet" href="/static/responsive-layout.css?v=1">',
+                '<link rel="stylesheet" href="/static/module-shell.css?v=1">',
+            ]
+            for asset in head_assets:
+                if asset not in body and "</head>" in body:
+                    body = body.replace("</head>", asset + "</head>", 1)
             scripts = [
                 '<script src="/static/period-report-loader.js?v=4" defer></script>',
                 '<script src="/static/password-reset.js?v=4" defer></script>',
@@ -116,6 +120,7 @@ def create_app():
                 '<script src="/static/app-shell-stability.js?v=3" defer></script>',
                 '<script src="/static/report-sort.js?v=1" defer></script>',
                 '<script src="/static/system-health.js?v=1" defer></script>',
+                '<script src="/static/module-shell.js?v=1" defer></script>',
             ]
             for script in scripts:
                 if script not in body and "</body>" in body:
