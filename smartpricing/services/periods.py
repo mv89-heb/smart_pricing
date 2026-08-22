@@ -1,14 +1,7 @@
-"""Period-lock read/write helpers.
-
-Shared by /api/periods/<ym>/lock|unlock (the original endpoints, kept for
-backward compatibility / existing tests) and /api/period-locks/<ym> (GET/POST/
-DELETE - the endpoint the dashboard screen actually calls; see routes/periods.py
-for the bug this fixes).
-"""
-from datetime import datetime
+"""Period-lock read/write helpers shared by the legacy and dashboard APIs."""
 
 from ..extensions import db
-from ..models import PeriodLock
+from ..models import PeriodLock, utc_now_naive
 
 
 def is_locked(date_or_month):
@@ -27,7 +20,7 @@ def set_lock(year_month, locked, username):
         db.session.add(row)
     if locked:
         row.locked = True
-        row.locked_at = datetime.utcnow()
+        row.locked_at = utc_now_naive()
         row.locked_by = username
     else:
         row.locked = False
