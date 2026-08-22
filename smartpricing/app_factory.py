@@ -38,11 +38,6 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def create_app():
-    # Flask(__name__) would resolve static/template folders relative to the
-    # smartpricing package directory (since __name__ is "smartpricing.app_factory"),
-    # not the project root where templates/ and static/ actually live. Point
-    # both explicitly at the project root so they resolve the same way the
-    # original single-file app.py did.
     app = Flask(
         __name__,
         static_folder=os.path.join(_PROJECT_ROOT, "static"),
@@ -98,7 +93,7 @@ def create_app():
     @app.after_request
     def inject_frontend_assets(response):
         """Inject shared UX assets into every HTML workspace without changing
-        the existing feature scripts or module-specific markup."""
+        existing feature scripts or module-specific business logic."""
         if "text/html" not in response.headers.get("Content-Type", ""):
             return response
         try:
@@ -106,6 +101,7 @@ def create_app():
             head_assets = [
                 '<link rel="stylesheet" href="/static/responsive-layout.css?v=1">',
                 '<link rel="stylesheet" href="/static/module-shell.css?v=1">',
+                '<link rel="stylesheet" href="/static/module-shell-polish.css?v=1">',
             ]
             for asset in head_assets:
                 if asset not in body and "</head>" in body:
@@ -132,11 +128,8 @@ def create_app():
         return response
 
     app.wsgi_app = _HealthMiddleware(app.wsgi_app)
-
     bootstrap_database(app)
 
-    # Backward-compatible attributes for callers that historically reached
-    # into the Flask app instance directly (see app.py shim / tests).
     from .services.pricing import price_for_date
     from .utils import money
     app.price_for_date = price_for_date
