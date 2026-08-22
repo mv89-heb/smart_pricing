@@ -26,6 +26,11 @@ def periodic_report():
     return send_from_directory(current_app.static_folder, "periodic_report.html")
 
 
+@bp.route("/settings")
+def settings():
+    return render_template("settings.html")
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
