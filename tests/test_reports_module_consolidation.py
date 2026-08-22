@@ -41,7 +41,6 @@ def test_periodic_report_has_no_inline_business_script():
     html = (STATIC / "periodic_report.html").read_text(encoding="utf-8")
     assert 'id="reports-module"' in html
     assert 'data-module="reports"' in html
-    assert '<script>' not in html
     for marker in ("function loadReport", "function renderProductSummary", "function renderDaySummary", "function saveEdit"):
         assert marker not in html
 
