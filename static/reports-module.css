@@ -7,7 +7,6 @@
   min-width: 0;
 }
 
-/* Compact period/action controls without changing their existing DOM contract. */
 #reports-module section.card.no-print {
   position: sticky;
   top: 0.75rem;
@@ -28,7 +27,6 @@
   transform: translateY(-1px);
 }
 
-/* Summary cards become a visually distinct information band. */
 #reports-module > section.grid.grid-cols-2.lg\\:grid-cols-5 {
   align-items: stretch;
 }
@@ -42,8 +40,7 @@
   box-shadow: 0 8px 24px rgb(15 23 42 / 0.07);
 }
 
-/* Existing edit modal becomes a right-side drawer.
-   The existing open/close JS and IDs remain untouched. */
+/* RTL: the drawer opens from the right and keeps the existing edit contract. */
 #editModal {
   justify-content: flex-start !important;
   align-items: stretch !important;
@@ -61,20 +58,24 @@
 }
 
 #editModal > div {
-  margin-right: auto;
-  margin-left: 0;
+  margin-right: 0;
+  margin-left: auto;
   width: min(100%, 430px) !important;
   max-width: 430px !important;
   height: 100%;
-  border-radius: 0 1.25rem 1.25rem 0 !important;
+  border-radius: 1.25rem 0 0 1.25rem !important;
   padding: 1.5rem !important;
   overflow-y: auto;
-  transform: translateX(-24px);
+  transform: translateX(24px);
   transition: transform .22s ease;
 }
 
 #editModal:not(.hidden) > div {
   transform: translateX(0);
+}
+
+body.drawer-open {
+  overflow: hidden;
 }
 
 @media (max-width: 640px) {
@@ -90,6 +91,7 @@
     height: auto;
     max-height: 92vh;
     margin-top: auto;
+    margin-left: 0;
     transform: translateY(24px);
   }
 
@@ -102,5 +104,14 @@
   #reports-module section.card.no-print {
     position: static;
     backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #editModal,
+  #editModal > div,
+  #reports-module .preset,
+  #reports-module > section.grid.grid-cols-2.lg\\:grid-cols-5 > .card {
+    transition: none !important;
   }
 }
