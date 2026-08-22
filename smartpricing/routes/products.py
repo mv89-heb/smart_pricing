@@ -1,8 +1,10 @@
+from datetime import datetime
+
 from flask import Blueprint, jsonify, request, session
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..extensions import db
-from ..models import PriceHistory, Product, utc_now_naive
+from ..models import PriceHistory, Product
 from ..security import log_activity, write_access
 from ..services.periods import is_locked
 from ..services.pricing import price_history_json
@@ -25,7 +27,7 @@ def _upsert_price_history(product, price, effective, actor):
     )
     if existing:
         existing.price = price
-        existing.changed_at = utc_now_naive()
+        existing.changed_at = datetime.utcnow()
         existing.changed_by = actor
         return existing
     row = PriceHistory(
@@ -45,15 +47,42 @@ def get_products():
 
 @bp.get("/api/products/details")
 def get_product_details():
+    """Return products and their next scheduled price in two DB queries.
+
+    The old implementation called price_history_json() once per product,
+    causing an N+1 query pattern on the price-list screen.
+    """
+    products = Product.query.order_by(Product.name.asc()).all()
+    if not products:
+        return jsonify([])
+    product_ids = [p.id for p in products]
+    histories = (
+        PriceHistory.query
+        .filter(PriceHistory.product_id.in_(product_ids))
+        .order_by(PriceHistory.product_id.asc(), PriceHistory.effective_from.desc(), PriceHistory.id.desc())
+        .all()
+    )
+    today = today_iso()
+    scheduled = {}
+    for row in histories:
+        if row.product_id not in scheduled and row.effective_from and row.effective_from > today:
+            scheduled[row.product_id] = {
+                "id": row.id,
+                "price": float(row.price),
+                "effective_from": row.effective_from,
+                "changed_at": row.changed_at.isoformat(),
+                "changed_by": row.changed_by,
+                "scheduled": True,
+            }
     return jsonify([
         {
             "id": p.id,
             "name": p.name,
             "price": float(p.price or 0),
             "tag": p.tag or "",
-            "scheduled_price": next((x for x in price_history_json(p) if x["scheduled"]), None),
+            "scheduled_price": scheduled.get(p.id),
         }
-        for p in Product.query.order_by(Product.name.asc()).all()
+        for p in products
     ])
 
 
