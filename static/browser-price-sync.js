@@ -12,10 +12,11 @@
     return list.map(p=>({name:String(p.name||'').trim(),current_price:Number(p.price ?? p.current_price ?? 0)||0,tag:p.tag||''})).filter(p=>p.name).sort((a,b)=>a.name.localeCompare(b.name,'he',{sensitivity:'base'}));
   }
   function install(){
-    const panel=$('right-panel'); if(!panel||$('browser-price-sync-btn'))return;
+    const panel=$('right-panel'); if(!panel||$('browser-price-sync-btn'))return true;
     const btn=document.createElement('button');btn.id='browser-price-sync-btn';btn.type='button';btn.className='text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1';btn.innerHTML='<i class="fa-solid fa-globe"></i> עדכון מחירים';btn.addEventListener('click',open);
     const heading=panel.querySelector('h2');
     if(heading?.parentElement) heading.parentElement.appendChild(btn); else panel.prepend(btn);
+    return true;
   }
   function open(){
     if($('browser-price-modal'))return;
@@ -38,5 +39,10 @@
   function selectChecks(mode){document.querySelectorAll('.browser-price-check').forEach(c=>{const x=results[Number(c.dataset.index)];const found=!!x?.found&&x.currency==='ILS'&&Number(x.price)>0;if(mode===null)c.checked=found&&Number(x.confidence)>=0.8&&Math.abs(Number(x.price)-Number(x.current_price))>0.001;else c.checked=mode;});updateCount();}
   function updateCount(){const n=[...document.querySelectorAll('.browser-price-check:checked')].length;$('browser-price-count').textContent=`${n} מוצרים מוכנים לעדכון מתוך ${results.length}`;$('browser-price-apply').disabled=n===0}
   async function apply(){const effective=$('browser-price-effective').value;if(!effective){toast('בחר תאריך תוקף',true);return;}const updates=[...document.querySelectorAll('.browser-price-check:checked')].map(c=>{const x=results[Number(c.dataset.index)];return{name:x.name,price:x.price}});if(!updates.length)return;$('browser-price-apply').disabled=true;$('browser-price-status').textContent=`שומר ${updates.length} מחירים...`;const r=await api('/api/browser-price-sync/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates,effective_from:effective})});const data=r?await r.json():{};if(!r?.ok){toast(data.error||'השמירה נכשלה',true);$('browser-price-apply').disabled=false;return;}localStorage.setItem('global_price_effective_from',effective);toast(`עודכנו ${data.applied?.length||0} מחירים`);close();if(typeof window.loadProducts==='function')await window.loadProducts();if(typeof window.refreshScheduledPrices==='function')window.refreshScheduledPrices();}
-  new MutationObserver(install).observe(document.body,{childList:true,subtree:true});install();
+  let observer;
+  function boot(){
+    if(install()){ observer?.disconnect(); observer=null; return; }
+    if(!observer){observer=new MutationObserver(()=>{if(install()){observer.disconnect();observer=null;}});observer.observe(document.body,{childList:true,subtree:true});}
+  }
+  boot();
 })();
