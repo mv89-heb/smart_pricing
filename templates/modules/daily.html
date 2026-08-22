@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}דיווח יומי | Smart Pricing{% endblock %}{% block content %}
+<div class="saas-grid" style="grid-template-columns:minmax(0,1fr)">
+  <section class="saas-card">
+    <div class="saas-card-header"><div><h2 style="margin:0;font-size:18px">דיווח יומי</h2><p style="margin:3px 0 0;color:#64748b;font-size:12px">הזנה וניהול חיובים לפי יום</p></div><div class="saas-toolbar"><input id="daily-date" class="saas-input" type="date"><button id="copy-yesterday" class="saas-button secondary">העתק מאתמול</button><button id="clear-day" class="saas-button danger">נקה יום</button></div></div>
+    <div class="saas-card-body">
+      <form id="entry-form" class="saas-toolbar" style="align-items:end;margin-bottom:16px">
+        <label style="min-width:220px;flex:1">מוצר<select id="entry-product" class="saas-select" required></select></label>
+        <label style="width:120px">כמות<input id="entry-qty" class="saas-input" value="1" inputmode="decimal" required></label>
+        <label style="min-width:180px;flex:1">הערה<input id="entry-note" class="saas-input" placeholder="הערה אישית"></label>
+        <label style="height:38px;display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700"><input id="entry-extra" type="checkbox"> אקסטרה</label>
+        <button class="saas-button" type="submit">הוסף חיוב</button>
+      </form>
+      <div class="saas-toolbar" style="justify-content:space-between;margin-bottom:10px"><input id="daily-search" class="saas-input saas-quick-search" placeholder="🔎 חיפוש מהיר בטבלה..."><span id="daily-count" style="font-size:12px;color:#64748b"></span></div>
+      <div class="saas-table-wrap"><table class="saas-table" id="daily-table"><thead><tr><th data-filter="product">מוצר <button class="saas-filter-button" data-column="product">⌄</button></th><th data-filter="quantity">כמות <button class="saas-filter-button" data-column="quantity">⌄</button></th><th data-filter="price">מחיר</th><th>סה״כ</th><th>סוג <button class="saas-filter-button" data-column="extra">⌄</button></th><th>הערה</th><th>פעולות</th></tr></thead><tbody id="daily-body"></tbody></table></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding:14px 16px;background:#0f172a;color:#fff;border-radius:12px"><span style="font-size:12px;color:#cbd5e1">סה״כ חיובים ליום זה</span><strong id="daily-total" style="font-size:24px">0.00 ₪</strong></div>
+    </div>
+  </section>
+</div>
+<div id="daily-drawer" class="saas-drawer-backdrop" hidden><aside class="saas-drawer"><div style="display:flex;justify-content:space-between;align-items:center"><h2>עריכת חיוב</h2><button id="daily-drawer-close" class="saas-icon-button">×</button></div><form id="daily-edit-form" class="saas-form-grid"><input type="hidden" id="edit-id"><label>מוצר<input id="edit-product-name" disabled></label><label>כמות<input id="edit-qty" type="number" min="0.01" step="0.01" required></label><label>הערה<input id="edit-note"></label><label><input id="edit-extra" type="checkbox"> אקסטרה</label><button class="saas-button" type="submit">שמור שינויים</button></form></aside></div>
+{% endblock %}{% block scripts %}<script src="{{ url_for('static', filename='daily-module.js') }}?v=1" defer></script>{% endblock %}
