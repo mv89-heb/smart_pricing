@@ -1,18 +1,57 @@
-import pathlib
+import os
+from pathlib import Path
 
-from tests.conftest import app
+os.environ.setdefault("FLASK_ENV", "development")
+os.environ.setdefault("DATABASE_URL", "sqlite:///test_module_navigation.db")
+os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from werkzeug.security import generate_password_hash
+
+from smartpricing.app_factory import create_app
+from smartpricing.extensions import db
+from smartpricing.models import User
+
+app = create_app()
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _login(client, role="admin"):
+    with app.app_context():
+        user = User.query.filter_by(username="test").first()
+        if user is None:
+            db.session.add(User(username="test", password=generate_password_hash("test-pass-123"), role=role))
+        else:
+            user.role = role
+        db.session.commit()
+    with client.session_transaction() as session:
+        session.update(logged_in=True, username="test", role=role)
 
 
 def body(client, path):
-    return client.get(path).get_data(as_text=True)
+    _login(client)
+    response = client.get(path)
+    assert response.status_code == 200
+    return response.get_data(as_text=True)
 
 
-def test_daily_is_server_rendered_as_the_daily_module():
+def test_all_module_routes_are_registered():
+    rules = {rule.rule for rule in app.url_map.iter_rules()}
+    assert {"/", "/pricing", "/dashboard", "/periodic-report", "/settings"}.issubset(rules)
+
+
+def test_each_module_renders_inside_one_application_shell():
+    for path, module, marker in (("/","daily","id=\"entry-form\""),("/pricing","pricing","id=\"pricing-body\""),("/dashboard","dashboard","id=\"dash-total\""),("/periodic-report","reports","id=\"reportBody\""),("/settings","settings","id=\"users-area\"")):
+        html=body(app.test_client(),path)
+        assert f'data-module="{module}"' in html
+        assert marker in html
+        assert html.count('<aside class="saas-sidebar"')==1
+        assert html.count('<header class="saas-topbar"')==1
+
+
+def test_daily_has_no_other_module_business_dom():
     html=body(app.test_client(),"/")
-    assert 'id="entry-form"' in html
-    assert 'href="/pricing"' in html
+    for marker in ("id=\"pricing-body\"","id=\"dash-total\"","id=\"reportBody\"","id=\"users-area\""):
+        assert marker not in html
     assert "דיווח יומי" in html
 
 
