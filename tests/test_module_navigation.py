@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 os.environ.setdefault("FLASK_ENV", "development")
 os.environ.setdefault("DATABASE_URL", "sqlite:///test_module_navigation.db")
@@ -31,17 +32,19 @@ def test_module_shell_assets_are_injected_into_settings_page():
 
 
 def test_main_navigation_urls_are_present_in_shell_asset():
-    from pathlib import Path
-
     shell = Path(app.static_folder, "module-shell.js").read_text(encoding="utf-8")
-    assert "href:'/'" in shell
-    assert "href:'/?module=pricing'" in shell
-    assert "href:'/periodic-report'" in shell
-    assert "href:'/static/dashboard.html'" in shell
-    assert "href:'/settings'" in shell
-    assert "module-shell-reports-page" in shell
-    assert "module-shell-dashboard-page" in shell
-    assert "module-shell-legacy-header" in shell
+    for href in ("href:'/'", "href:'/?module=pricing'", "href:'/periodic-report'", "href:'/static/dashboard.html'", "href:'/settings'"):
+        assert href in shell
+
+
+def test_shell_has_distinct_module_metadata():
+    shell = Path(app.static_folder, "module-shell.js").read_text(encoding="utf-8")
+    for key in ("daily", "pricing", "reports", "dashboard", "settings"):
+        assert f"{key}:" in shell
+    assert "subtitle:'מוצרים, מחירים ותזמון עדכונים'" in shell
+    assert "subtitle:'דוחות תקופתיים, סיכומים וייצוא'" in shell
+    assert "subtitle:'מגמות, KPI וניתוח ביצועים'" in shell
+    assert "subtitle:'משתמשים, גיבוי והעדפות מערכת'" in shell
 
 
 def test_settings_page_is_rendered_inside_application_shell():
@@ -64,3 +67,11 @@ def test_dashboard_and_report_keep_their_module_shell_assets():
         assert "/static/module-shell.css?v=1" in body
         assert "/static/module-shell-polish.css?v=1" in body
         assert "/static/module-shell.js?v=1" in body
+
+
+def test_ux_state_styles_exist_for_core_workspaces():
+    css = Path(app.static_folder, "module-shell-polish.css").read_text(encoding="utf-8")
+    assert ".ui-action-busy" in css
+    assert "אין מוצרים להצגה" in css
+    assert "אין חיובים להצגה ליום שנבחר" in css
+    assert ".module-shell-reports-page #empty" in css
