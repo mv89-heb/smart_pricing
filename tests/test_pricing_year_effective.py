@@ -11,7 +11,7 @@ from werkzeug.security import generate_password_hash
 
 from smartpricing.app_factory import create_app
 from smartpricing.extensions import db
-from smartpricing.models import PriceHistory, Product, User
+from smartpricing.models import PeriodLock, PriceHistory, Product, User
 from smartpricing.services.pricing import price_for_date
 
 app = create_app()
@@ -87,10 +87,7 @@ def test_year_start_effective_updates_existing_baseline_without_duplicates():
 def test_year_start_effective_rejects_locked_start_period():
     with app.app_context():
         db.session.add(Product(name="מוצר", price=10, tag=None))
-        db.session.commit()
-
-        from smartpricing.models import PeriodLock
-        db.session.add(PeriodLock(period="2026-01", locked=True))
+        db.session.add(PeriodLock(year_month="2026-01", locked=True))
         db.session.commit()
 
     response = _client().post(
