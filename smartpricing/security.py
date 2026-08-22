@@ -4,7 +4,7 @@ import time
 from flask import jsonify, session
 
 from .extensions import db
-from .models import ActivityLog
+from .models import ActivityLog, User
 
 LOGIN_WINDOW_SECONDS = 300
 LOGIN_MAX_ATTEMPTS = 10
@@ -22,21 +22,36 @@ def login_rate_limited(ip):
     return False
 
 
+def current_user():
+    """Resolve the authenticated user from the database, not a stale session role."""
+    if not session.get("logged_in") or not session.get("username"):
+        return None
+    return User.query.filter_by(username=session.get("username")).first()
+
+
 def write_access():
-    """Return an error response if the current session cannot perform write actions, else None."""
-    if not session.get("logged_in"):
+    """Return an error response if the current user cannot perform writes."""
+    user = current_user()
+    if not user:
+        session.clear()
         return jsonify({"error": "Unauthorized"}), 401
-    if session.get("role", "viewer") == "viewer":
+    if user.role == "viewer":
         return jsonify({"success": False, "error": "אין הרשאות"}), 403
+    # Keep the session compatible with the DB after an admin/editor role change.
+    session["role"] = user.role
     return None
 
 
 def admin_access():
-    """Return an error response if the current session is not an admin, else None."""
-    if not session.get("logged_in"):
+    """Return an error response if the current database user is not an admin."""
+    user = current_user()
+    if not user:
+        session.clear()
         return jsonify({"error": "Unauthorized"}), 401
-    if session.get("role") != "admin":
+    if user.role != "admin":
+        session["role"] = user.role
         return jsonify({"error": "נדרש מנהל"}), 403
+    session["role"] = "admin"
     return None
 
 
