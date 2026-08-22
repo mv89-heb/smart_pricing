@@ -1,2 +1,10 @@
-"""Load the same API composition used by the production entrypoint."""
-import api_routes  # noqa: F401,E402
+"""Shared test bootstrap for the canonical Flask application."""
+import os
+
+os.environ.setdefault("FLASK_ENV", "development")
+os.environ.setdefault("DATABASE_URL", "sqlite:///test_suite.db")
+os.environ.setdefault("SECRET_KEY", "test-secret-key")
+
+from smartpricing.app_factory import create_app
+
+app = create_app()
