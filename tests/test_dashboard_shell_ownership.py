@@ -1,22 +1,14 @@
 from pathlib import Path
+ROOT=Path(__file__).resolve().parents[1]
 
-
-def test_dashboard_does_not_duplicate_global_shell_navigation_or_controls():
-    html = Path("static/dashboard.html").read_text(encoding="utf-8")
-
-    # Navigation, theme, and fullscreen belong to module-shell.js.
-    assert 'href="/static/dashboard.html"' not in html
+def test_dashboard_is_a_first_class_module_template():
+    html=(ROOT/'templates/modules/dashboard.html').read_text(encoding='utf-8')
+    assert 'extends "base.html"' in html
+    assert 'id="dash-total"' in html
+    assert 'id="dash-chart"' in html
     assert 'href="/periodic-report"' not in html
-    assert 'onclick="toggleDark()"' not in html
-    assert 'onclick="toggleFullscreen()"' not in html
-    assert 'function toggleDark(' not in html
-    assert 'function toggleFullscreen(' not in html
 
-
-def test_dashboard_keeps_only_dashboard_specific_actions():
-    html = Path("static/dashboard.html").read_text(encoding="utf-8")
-
-    assert 'onclick="compare()"' in html
-    assert 'onclick="lockPeriod()"' in html
-    assert 'onclick="unlockPeriod()"' in html
-    assert '/api/report/period?' in html
+def test_dashboard_has_one_runtime_owner():
+    html=(ROOT/'templates/modules/dashboard.html').read_text(encoding='utf-8')
+    assert 'dashboard-module.js?v=1' in html
+    assert 'module-shell.js' not in html
