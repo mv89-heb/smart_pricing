@@ -1,10 +1,8 @@
-from datetime import datetime
-
 from flask import Blueprint, jsonify, request, session
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..extensions import db
-from ..models import PriceHistory, Product
+from ..models import PriceHistory, Product, utc_now_naive
 from ..security import log_activity, write_access
 from ..services.periods import is_locked
 from ..services.pricing import price_history_json
@@ -27,7 +25,7 @@ def _upsert_price_history(product, price, effective, actor):
     )
     if existing:
         existing.price = price
-        existing.changed_at = datetime.utcnow()
+        existing.changed_at = utc_now_naive()
         existing.changed_by = actor
         return existing
     row = PriceHistory(
@@ -107,7 +105,7 @@ def apply_year_effective_to_all():
         return denied
 
     data = request.get_json(silent=True) or {}
-    year = str(data.get("year") or datetime.now().year).strip()
+    year = str(data.get("year") or today_iso()[:4]).strip()
     if not year.isdigit() or len(year) != 4:
         return jsonify({"success": False, "error": "שנה לא תקינה"}), 400
     year_int = int(year)
