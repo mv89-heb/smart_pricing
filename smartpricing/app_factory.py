@@ -59,6 +59,20 @@ def create_app():
             return jsonify({"error": "Unauthorized"}), 401
         if not request.path.startswith("/api/") and not session.get("logged_in"):
             return redirect(url_for("pages.login"))
+
+        # The session identifies the browser, but the DB is the source of
+        # truth. Deleted users are logged out immediately and role changes are
+        # reflected on every request instead of waiting for session expiry.
+        if session.get("logged_in") and session.get("username"):
+            from .models import User
+            user = User.query.filter_by(username=session.get("username")).first()
+            if user is None:
+                session.clear()
+                if request.path.startswith("/api/"):
+                    return jsonify({"error": "Unauthorized"}), 401
+                return redirect(url_for("pages.login"))
+            session["role"] = user.role
+
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             origin = request.headers.get("Origin")
             if origin and origin.rstrip("/") != request.host_url.rstrip("/"):
