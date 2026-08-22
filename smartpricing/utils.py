@@ -1,10 +1,9 @@
-"""Small stateless helpers shared across services and routes.
-
-These are unchanged in behavior from the original app.py - only consolidated
-into one place instead of being duplicated in app.py / api_routes.py / wsgi.py.
-"""
+"""Small stateless helpers shared across services and routes."""
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
+from zoneinfo import ZoneInfo
+
+ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 
 
 def money(value):
@@ -32,7 +31,8 @@ def valid_month(value):
 
 
 def today_iso():
-    return datetime.utcnow().strftime("%Y-%m-%d")
+    """Return the business date in Israel, not the server's UTC date."""
+    return datetime.now(ISRAEL_TZ).date().isoformat()
 
 
 def entry_total(entry):
