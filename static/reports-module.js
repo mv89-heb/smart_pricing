@@ -1,9 +1,4 @@
-/* Unified Reports workspace controller.
- * Owns period controls, report loading, summaries, table rendering,
- * export, edit/delete behavior and the edit drawer presentation contract.
- * Existing global function names are intentionally preserved because the
- * report HTML still uses inline onclick/oninput hooks.
- */
+/* Unified Reports workspace controller. */
 (function () {
   'use strict';
 
@@ -26,23 +21,12 @@
     return d.toISOString().slice(0, 10);
   };
 
-  function ym(d) { return d.toISOString().slice(0, 7); }
   function parseDate(s) {
     const [y, m, d] = s.split('-').map(Number);
     return new Date(y, m - 1, d);
   }
   function toInput(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  }
-  function monthList(from, to) {
-    const out = [];
-    let d = new Date(from.getFullYear(), from.getMonth(), 1);
-    const end = new Date(to.getFullYear(), to.getMonth(), 1);
-    while (d <= end) {
-      out.push(ym(d));
-      d.setMonth(d.getMonth() + 1);
-    }
-    return out;
   }
 
   async function api(url, opt = {}) {
@@ -89,15 +73,13 @@
       ? Number(e.unit_price)
       : Number(products[e.product_name] || 0);
   }
-
   function totalOf(e) { return priceOf(e) * Number(e.quantity || 0); }
 
   const ReportsSummary = {
     unitPrice: priceOf,
     total: totalOf,
     renderKpis(items) {
-      let reg = 0;
-      let ext = 0;
+      let reg = 0, ext = 0;
       const days = new Set();
       items.forEach((e) => {
         const value = totalOf(e);
@@ -147,9 +129,7 @@
   window.setPreset = setPreset;
   window.priceOf = priceOf;
   window.totalOf = totalOf;
-
-  function renderAll() { ReportsSummary.renderAll(entries); }
-  window.renderAll = renderAll;
+  window.renderAll = () => ReportsSummary.renderAll(entries);
 
   function renderTable() {
     const q = ($('search').value || '').toLowerCase();
@@ -166,12 +146,8 @@
   window.renderTable = renderTable;
 
   async function init() {
-    const u = await api('/api/current_user');
-    if (u && u.ok) {
-      const data = await u.json();
-      currentUserRole = data.role || 'viewer';
-    }
-    const p = await api('/api/products');
+    const [u, p] = await Promise.all([api('/api/current_user'), api('/api/products')]);
+    if (u && u.ok) currentUserRole = (await u.json()).role || 'viewer';
     if (p && p.ok) products = await p.json();
     const today = isoToday();
     $('fromDate').value = today.slice(0, 8) + '01';
@@ -193,14 +169,21 @@
     loading = true;
     $('reportBody').innerHTML = '<tr><td colspan="8" class="p-10 text-center text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-2xl"></i></td></tr>';
     try {
-      const all = [];
-      for (const month of monthList(parseDate(from), parseDate(to))) {
-        const r = await api('/api/report/month/' + month);
-        if (r && r.ok) all.push(...await r.json());
+      const r = await api(`/api/report/period?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      if (!r || !r.ok) {
+        const data = r ? await r.json().catch(() => ({})) : {};
+        throw new Error(data.error || 'טעינת הדוח נכשלה');
       }
-      entries = all.filter((e) => e.date >= from && e.date <= to);
+      const data = await r.json();
+      entries = Array.isArray(data.entries) ? data.entries : [];
       $('periodTitle').textContent = 'תקופה: ' + from.split('-').reverse().join('/') + ' – ' + to.split('-').reverse().join('/');
       renderAll();
+    } catch (e) {
+      console.error(e);
+      $('reportBody').innerHTML = '';
+      $('empty').classList.remove('hidden');
+      $('rangeError').textContent = e.message || 'טעינת הדוח נכשלה';
+      $('rangeError').classList.remove('hidden');
     } finally {
       loading = false;
     }
@@ -283,7 +266,6 @@
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && $('editModal') && !$('editModal').classList.contains('hidden')) closeEdit();
   });
-
   document.addEventListener('click', (event) => {
     if (event.target === $('editModal')) closeEdit();
   });
