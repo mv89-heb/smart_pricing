@@ -1,0 +1,106 @@
+/* Reports module presentation layer.
+   Business markup and existing element IDs remain unchanged.
+   This file owns only Reports UX presentation, not report logic. */
+
+#reports-module {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Compact period/action controls without changing their existing DOM contract. */
+#reports-module section.card.no-print {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 20;
+  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, white 92%, transparent);
+}
+
+.dark #reports-module section.card.no-print {
+  background: color-mix(in srgb, rgb(15 23 42) 92%, transparent);
+}
+
+#reports-module .preset {
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+#reports-module .preset:hover {
+  transform: translateY(-1px);
+}
+
+/* Summary cards become a visually distinct information band. */
+#reports-module > section.grid.grid-cols-2.lg\\:grid-cols-5 {
+  align-items: stretch;
+}
+
+#reports-module > section.grid.grid-cols-2.lg\\:grid-cols-5 > .card {
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+#reports-module > section.grid.grid-cols-2.lg\\:grid-cols-5 > .card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.07);
+}
+
+/* Existing edit modal becomes a right-side drawer.
+   The existing open/close JS and IDs remain untouched. */
+#editModal {
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  padding: 0 !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .2s ease, visibility .2s ease;
+}
+
+#editModal:not(.hidden) {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+#editModal > div {
+  margin-right: auto;
+  margin-left: 0;
+  width: min(100%, 430px) !important;
+  max-width: 430px !important;
+  height: 100%;
+  border-radius: 0 1.25rem 1.25rem 0 !important;
+  padding: 1.5rem !important;
+  overflow-y: auto;
+  transform: translateX(-24px);
+  transition: transform .22s ease;
+}
+
+#editModal:not(.hidden) > div {
+  transform: translateX(0);
+}
+
+@media (max-width: 640px) {
+  #reports-module section.card.no-print {
+    position: relative;
+    top: auto;
+  }
+
+  #editModal > div {
+    width: 100% !important;
+    max-width: none !important;
+    border-radius: 1.25rem 1.25rem 0 0 !important;
+    height: auto;
+    max-height: 92vh;
+    margin-top: auto;
+    transform: translateY(24px);
+  }
+
+  #editModal:not(.hidden) > div {
+    transform: translateY(0);
+  }
+}
+
+@media print {
+  #reports-module section.card.no-print {
+    position: static;
+    backdrop-filter: none;
+  }
+}
