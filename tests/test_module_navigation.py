@@ -66,6 +66,21 @@ def test_periodic_report_keeps_its_module_shell_assets():
     assert "/static/module-shell.css?v=1" in body
     assert "/static/module-shell-polish.css?v=1" in body
     assert "/static/module-shell.js?v=1" in body
+    assert "/static/reports-module.js?v=1" in body
+    assert "/static/reports-controls.js?v=1" not in body
+    assert "/static/reports-summary.js?v=1" not in body
+
+
+def test_periodic_report_is_a_reports_workspace_not_a_second_shell():
+    client = app.test_client()
+    _login(client)
+    response = client.get("/periodic-report")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'id="reports-module"' in body
+    assert 'data-module="reports"' in body
+    assert '<header class="flex flex-col lg:flex-row' not in body
+    assert 'href="/static/dashboard.html" class="px-3 py-2' not in body
 
 
 def test_dashboard_has_canonical_dashboard_workspace_markers():
@@ -106,7 +121,9 @@ def test_feature_scripts_are_scoped_to_their_own_modules():
     settings = paths(_module_scripts("/settings"))
 
     assert "module-shell.js" in daily and "global-filters.js" in daily
-    assert "module-shell.js" in reports and "reports-controls.js" in reports and "reports-summary.js" in reports
+    assert "module-shell.js" in reports and "reports-module.js" in reports
+    assert "reports-controls.js" not in reports
+    assert "reports-summary.js" not in reports
     assert "module-shell.js" in dashboard
     assert "module-shell.js" in settings and "password-reset.js" in settings
     assert "report-sort.js" not in reports
