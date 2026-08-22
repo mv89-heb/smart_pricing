@@ -94,6 +94,55 @@ def get_product_history(product_name):
     return jsonify(price_history_json(product))
 
 
+@bp.post("/api/products/apply-year-effective")
+def apply_year_effective_to_all():
+    """Create a common Jan-1 price baseline for every product.
+
+    This does not change today's Product.price. It records each product's
+    current price as effective from the requested year's first day, while
+    preserving any later price-history changes. The operation is atomic.
+    """
+    denied = write_access()
+    if denied:
+        return denied
+
+    data = request.get_json(silent=True) or {}
+    year = str(data.get("year") or datetime.now().year).strip()
+    if not year.isdigit() or len(year) != 4:
+        return jsonify({"success": False, "error": "שנה לא תקינה"}), 400
+    year_int = int(year)
+    if year_int < 2000 or year_int > 2100:
+        return jsonify({"success": False, "error": "שנה לא תקינה"}), 400
+
+    effective = f"{year}-01-01"
+    if not valid_date(effective):
+        return jsonify({"success": False, "error": "תאריך תוקף לא תקין"}), 400
+    if is_locked(effective):
+        return jsonify({"success": False, "error": "תקופת תחילת השנה נעולה ולכן לא ניתן לעדכן את תוקף המחירון"}), 423
+
+    products = Product.query.order_by(Product.id.asc()).all()
+    if not products:
+        return jsonify({"success": True, "updated": 0, "effective_from": effective})
+
+    actor = _actor()
+    try:
+        for product in products:
+            _upsert_price_history(product, money(product.price), effective, actor)
+        db.session.commit()
+        log_activity(
+            "APPLY_YEAR_EFFECTIVE_ALL",
+            f"נקבע תוקף מחירון לכל המוצרים מ-{effective} ({len(products)} מוצרים)",
+        )
+        return jsonify({
+            "success": True,
+            "updated": len(products),
+            "effective_from": effective,
+        })
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
+
+
 @bp.post("/api/products")
 def add_product():
     denied = write_access()
