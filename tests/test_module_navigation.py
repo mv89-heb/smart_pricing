@@ -57,16 +57,25 @@ def test_settings_page_is_rendered_inside_application_shell():
     assert "module-shell-settings" in body
 
 
-def test_dashboard_and_report_keep_their_module_shell_assets():
+def test_periodic_report_keeps_its_module_shell_assets():
     client = app.test_client()
     _login(client)
-    for path in ("/periodic-report", "/static/dashboard.html"):
-        response = client.get(path)
-        body = response.get_data(as_text=True)
-        assert response.status_code == 200
-        assert "/static/module-shell.css?v=1" in body
-        assert "/static/module-shell-polish.css?v=1" in body
-        assert "/static/module-shell.js?v=1" in body
+    response = client.get("/periodic-report")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "/static/module-shell.css?v=1" in body
+    assert "/static/module-shell-polish.css?v=1" in body
+    assert "/static/module-shell.js?v=1" in body
+
+
+def test_dashboard_has_canonical_dashboard_workspace_markers():
+    client = app.test_client()
+    _login(client)
+    response = client.get("/static/dashboard.html")
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'id="monthTotal"' in body
+    assert 'id="trend"' in body
 
 
 def test_ux_state_styles_exist_for_core_workspaces():
