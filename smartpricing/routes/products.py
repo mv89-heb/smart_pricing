@@ -1,255 +1,71 @@
-from flask import Blueprint, jsonify, request, session
-from sqlalchemy.exc import SQLAlchemyError
-
+from datetime import date
+from flask import Blueprint, request, jsonify, g
+from sqlalchemy import func, select
 from ..extensions import db
-from ..models import PriceHistory, Product, utc_now_naive
-from ..security import log_activity, write_access
-from ..services.periods import is_locked
-from ..services.pricing import price_history_json
-from ..utils import money, today_iso, valid_date
+from ..models import DailyEntry, Product, PeriodLock
+from ..security import require_role, audit
+from ..services.pricing import set_price
 
-bp = Blueprint("products", __name__)
+products_bp = Blueprint("products", __name__, url_prefix="/api/products")
 
+def _locked(tenant_id, value): return db.session.scalar(select(PeriodLock.id).where(PeriodLock.tenant_id == tenant_id, PeriodLock.year_month == value, PeriodLock.locked.is_(True))) is not None
 
-def _actor():
-    """Return the authenticated username for audit/history records."""
-    return str(session.get("username") or "מערכת")[:100]
+@products_bp.post("")
+@require_role("editor")
+def create_product():
+    data=request.get_json(silent=True) or {}; name=(data.get("name") or "").strip()
+    if not name: return jsonify(status="error",message="שם המוצר הינו שדה חובה"),400
+    if db.session.scalar(select(Product.id).where(Product.tenant_id==g.current_user.tenant_id,Product.name==name)): return jsonify(status="error",message="מוצר בשם זה כבר קיים"),409
+    try: price=float(data.get("current_price",0)); assert price>=0
+    except (TypeError,ValueError,AssertionError): return jsonify(status="error",message="מחיר לא תקין"),400
+    p=Product(tenant_id=g.current_user.tenant_id,sku=data.get("sku"),name=name,category=data.get("category") or "כללי",unit=data.get("unit") or "יחידות",current_price=price); db.session.add(p); db.session.flush(); set_price(p,price,date.today(),g.current_user.name); audit("PRODUCT_CREATE",name); db.session.commit(); return jsonify(status="success",message="המוצר התווסף בהצלחה",id=p.id),201
 
+@products_bp.put("/<int:product_id>")
+@require_role("editor")
+def update_product(product_id):
+    p=db.session.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==g.current_user.tenant_id))
+    if not p:return jsonify(status="error",message="המוצר לא נמצא"),404
+    data=request.get_json(silent=True) or {}; p.name=(data.get("name") or p.name).strip(); p.category=data.get("category") or p.category; p.unit=data.get("unit") or p.unit
+    if "current_price" in data:
+        try: price=float(data["current_price"]); assert price>=0
+        except (TypeError,ValueError,AssertionError): return jsonify(status="error",message="מחיר לא תקין"),400
+        set_price(p,price,date.today(),g.current_user.name)
+    audit("PRODUCT_UPDATE",p.name); db.session.commit(); return jsonify(status="success",message="המוצר עודכן בהצלחה")
 
-def _upsert_price_history(product, price, effective, actor):
-    """Single owner for creating/updating a price-history record."""
-    existing = (
-        PriceHistory.query.filter_by(product_id=product.id, effective_from=effective)
-        .order_by(PriceHistory.id.desc())
-        .first()
-    )
-    if existing:
-        existing.price = price
-        existing.changed_at = utc_now_naive()
-        existing.changed_by = actor
-        return existing
-    row = PriceHistory(
-        product_id=product.id,
-        price=price,
-        effective_from=effective,
-        changed_by=actor,
-    )
-    db.session.add(row)
-    return row
+@products_bp.delete("/<int:product_id>")
+@require_role("admin")
+def delete_product(product_id):
+    p=db.session.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==g.current_user.tenant_id))
+    if not p:return jsonify(status="error",message="המוצר לא נמצא"),404
+    if db.session.scalar(select(func.count(DailyEntry.id)).where(DailyEntry.product_id==p.id)):
+        return jsonify(status="error",message="לא ניתן למחוק מוצר שכבר שימש בדיווחים; השבת אותו במקום זאת"),409
+    db.session.delete(p); audit("PRODUCT_DELETE",p.name); db.session.commit(); return jsonify(status="success",message="המוצר נמחק בהצלחה")
 
+@products_bp.post("/<int:product_id>/price")
+@require_role("editor")
+def set_product_price(product_id):
+    p=db.session.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==g.current_user.tenant_id))
+    if not p:return jsonify(status="error",message="המוצר לא נמצא"),404
+    data=request.get_json(silent=True) or {}
+    try: eff=date.fromisoformat(data["effective_date"]); price=float(data["price"]); assert price>=0
+    except (KeyError,TypeError,ValueError,AssertionError): return jsonify(status="error",message="מחיר או תאריך לא תקינים"),400
+    if _locked(g.current_user.tenant_id,eff.strftime("%Y-%m")): return jsonify(status="error",message="התקופה נעולה"),409
+    set_price(p,price,eff,g.current_user.name); audit("PRICE_CHANGE",f"{p.name}: {price} @ {eff.isoformat()}"); db.session.commit(); return jsonify(status="success",message="המחיר נשמר")
 
-@bp.get("/api/products")
-def get_products():
-    return jsonify({p.name: float(p.price or 0) for p in Product.query.order_by(Product.name.asc()).all()})
+@products_bp.post("/apply-validity")
+@require_role("editor")
+def apply_validity():
+    data=request.get_json(silent=True) or {}
+    try: year=int(data.get("year")); eff=date(year,1,1)
+    except (TypeError,ValueError): return jsonify(status="error",message="שנה לא תקינה"),400
+    if _locked(g.current_user.tenant_id,f"{year:04d}-01"): return jsonify(status="error",message="ינואר של השנה הזו נעול"),409
+    products=db.session.scalars(select(Product).where(Product.tenant_id==g.current_user.tenant_id)).all()
+    for p in products:set_price(p,p.current_price,eff,g.current_user.name)
+    audit("PRICEBOOK_VALIDITY",f"01/01/{year} לכל {len(products)} המוצרים"); db.session.commit(); return jsonify(status="success",message=f"תוקף המחירון הוחל מ-01/01/{year}",count=len(products))
 
-
-@bp.get("/api/products/details")
-def get_product_details():
-    """Return products and their next scheduled price in two DB queries.
-
-    The old implementation called price_history_json() once per product,
-    causing an N+1 query pattern on the price-list screen.
-    """
-    products = Product.query.order_by(Product.name.asc()).all()
-    if not products:
-        return jsonify([])
-    product_ids = [p.id for p in products]
-    histories = (
-        PriceHistory.query
-        .filter(PriceHistory.product_id.in_(product_ids))
-        .order_by(PriceHistory.product_id.asc(), PriceHistory.effective_from.desc(), PriceHistory.id.desc())
-        .all()
-    )
-    today = today_iso()
-    scheduled = {}
-    for row in histories:
-        if row.product_id not in scheduled and row.effective_from and row.effective_from > today:
-            scheduled[row.product_id] = {
-                "id": row.id,
-                "price": float(row.price),
-                "effective_from": row.effective_from,
-                "changed_at": row.changed_at.isoformat(),
-                "changed_by": row.changed_by,
-                "scheduled": True,
-            }
-    return jsonify([
-        {
-            "id": p.id,
-            "name": p.name,
-            "price": float(p.price or 0),
-            "tag": p.tag or "",
-            "scheduled_price": scheduled.get(p.id),
-        }
-        for p in products
-    ])
-
-
-@bp.get("/api/products/<path:product_name>/history")
-def get_product_history(product_name):
-    product = Product.query.filter_by(name=product_name).first()
-    if not product:
-        return jsonify({"error": "מוצר לא נמצא"}), 404
-    return jsonify(price_history_json(product))
-
-
-@bp.post("/api/products/apply-year-effective")
-def apply_year_effective_to_all():
-    """Create a common Jan-1 price baseline for every product.
-
-    This does not change today's Product.price. It records each product's
-    current price as effective from the requested year's first day, while
-    preserving any later price-history changes. The operation is atomic.
-    """
-    denied = write_access()
-    if denied:
-        return denied
-
-    data = request.get_json(silent=True) or {}
-    year = str(data.get("year") or today_iso()[:4]).strip()
-    if not year.isdigit() or len(year) != 4:
-        return jsonify({"success": False, "error": "שנה לא תקינה"}), 400
-    year_int = int(year)
-    if year_int < 2000 or year_int > 2100:
-        return jsonify({"success": False, "error": "שנה לא תקינה"}), 400
-
-    effective = f"{year}-01-01"
-    if not valid_date(effective):
-        return jsonify({"success": False, "error": "תאריך תוקף לא תקין"}), 400
-    if is_locked(effective):
-        return jsonify({"success": False, "error": "תקופת תחילת השנה נעולה ולכן לא ניתן לעדכן את תוקף המחירון"}), 423
-
-    products = Product.query.order_by(Product.id.asc()).all()
-    if not products:
-        return jsonify({"success": True, "updated": 0, "effective_from": effective})
-
-    actor = _actor()
-    try:
-        for product in products:
-            _upsert_price_history(product, money(product.price), effective, actor)
-        db.session.commit()
-        log_activity(
-            "APPLY_YEAR_EFFECTIVE_ALL",
-            f"נקבע תוקף מחירון לכל המוצרים מ-{effective} ({len(products)} מוצרים)",
-        )
-        return jsonify({
-            "success": True,
-            "updated": len(products),
-            "effective_from": effective,
-        })
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
-
-
-@bp.post("/api/products")
-def add_product():
-    denied = write_access()
-    if denied:
-        return denied
-    data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()[:100]
-    tag = (data.get("tag") or "").strip()[:80]
-    try:
-        price = money(data.get("price"))
-    except Exception:
-        return jsonify({"success": False, "error": "מחיר לא תקין"}), 400
-    effective = (data.get("effective_from") or today_iso()).strip()
-    if not name or price < 0 or not valid_date(effective):
-        return jsonify({"success": False, "error": "נתונים שגויים"}), 400
-    if effective > today_iso():
-        return jsonify({"success": False, "error": "מוצר חדש חייב להתחיל במחיר תקף מהיום. ניתן לתזמן שינוי מחיר למוצר קיים."}), 400
-    if Product.query.filter_by(name=name).first():
-        return jsonify({"success": False, "error": "מוצר קיים"}), 409
-    actor = _actor()
-    try:
-        p = Product(name=name, price=price, tag=tag or None)
-        db.session.add(p)
-        db.session.flush()
-        _upsert_price_history(p, price, effective, actor)
-        db.session.commit()
-        log_activity("NEW_PRODUCT", f"מוצר חדש: {name}, מחיר {price}, תקף מ-{effective}")
-        return jsonify({"success": True})
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
-
-
-@bp.put("/api/products/<path:product_name>")
-def update_product(product_name):
-    denied = write_access()
-    if denied:
-        return denied
-    product = Product.query.filter_by(name=product_name).first()
-    if not product:
-        return jsonify({"success": False, "error": "מוצר לא נמצא"}), 404
-    data = request.get_json(silent=True) or {}
-    name = str(data.get("name") or product.name).strip()[:100]
-    if not name:
-        return jsonify({"success": False, "error": "שם מוצר לא תקין"}), 400
-    try:
-        price = money(data.get("price"))
-    except Exception:
-        return jsonify({"success": False, "error": "מחיר לא תקין"}), 400
-    if price < 0:
-        return jsonify({"success": False, "error": "מחיר לא תקין"}), 400
-    effective = str(data.get("effective_from") or today_iso()).strip()
-    if not valid_date(effective):
-        return jsonify({"success": False, "error": "תאריך תוקף לא תקין"}), 400
-    if name != product.name and Product.query.filter(Product.name == name, Product.id != product.id).first():
-        return jsonify({"success": False, "error": "מוצר קיים"}), 409
-    if is_locked(effective):
-        return jsonify({"success": False, "error": "התקופה נעולה"}), 423
-    try:
-        old_name = product.name
-        product.name = name
-        _upsert_price_history(product, price, effective, _actor())
-        if effective <= today_iso():
-            product.price = price
-        db.session.commit()
-        log_activity("PRICE_UPDATE", f"מחיר מוצר: {old_name} -> {product.name}, {price}, תקף מ-{effective}")
-        return jsonify({"success": True, "name": product.name, "price": float(product.price), "effective_from": effective})
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
-
-
-@bp.delete("/api/products/<path:product_name>/scheduled")
-def cancel_scheduled_prices(product_name):
-    denied = write_access()
-    if denied:
-        return denied
-    product = Product.query.filter_by(name=product_name).first()
-    if not product:
-        return jsonify({"success": False, "error": "מוצר לא נמצא"}), 404
-    today = today_iso()
-    rows = PriceHistory.query.filter(PriceHistory.product_id == product.id, PriceHistory.effective_from > today).all()
-    try:
-        count = len(rows)
-        for row in rows:
-            db.session.delete(row)
-        db.session.commit()
-        if count:
-            log_activity("CANCEL_SCHEDULED_PRICE", f"בוטלו {count} מחירי עתיד עבור {product.name}")
-        return jsonify({"success": True, "cancelled": count})
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
-
-
-@bp.delete("/api/products/<path:product_name>")
-def delete_product(product_name):
-    denied = write_access()
-    if denied:
-        return denied
-    product = Product.query.filter_by(name=product_name).first()
-    if not product:
-        return jsonify({"success": False, "error": "מוצר לא נמצא"}), 404
-    try:
-        name = product.name
-        db.session.delete(product)
-        db.session.commit()
-        log_activity("DELETE_PRODUCT", f"נמחק מוצר: {name}")
-        return jsonify({"success": True})
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
+@products_bp.post("/<int:product_id>/toggle")
+@require_role("editor")
+def toggle_product(product_id):
+    p=db.session.scalar(select(Product).where(Product.id==product_id,Product.tenant_id==g.current_user.tenant_id))
+    if not p:return jsonify(status="error",message="המוצר לא נמצא"),404
+    p.is_active=not p.is_active; audit("PRODUCT_STATUS",p.name); db.session.commit(); return jsonify(status="success",message="סטטוס המוצר עודכן")

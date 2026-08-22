@@ -1,180 +1,76 @@
-from decimal import Decimal
-
-from flask import Blueprint, jsonify, request
-from sqlalchemy.exc import SQLAlchemyError
-
+from datetime import date
+from flask import Blueprint, request, jsonify, g
+from sqlalchemy import select
 from ..extensions import db
-from ..models import DailyEntry, Product
-from ..security import log_activity, write_access
-from ..services.periods import is_locked
-from ..services.pricing import price_for_date
-from ..utils import entry_json, money, valid_date
+from ..models import DailyEntry, Product, PeriodLock
+from ..security import require_role, audit
+from ..services.pricing import effective_price
 
-bp = Blueprint("entries", __name__)
+entries_bp = Blueprint("entries", __name__, url_prefix="/api/entries")
 
 
-@bp.post("/api/entries")
+def _period_locked(tenant_id, d):
+    ym = d.strftime("%Y-%m")
+    return db.session.scalar(select(PeriodLock.id).where(PeriodLock.tenant_id == tenant_id, PeriodLock.year_month == ym, PeriodLock.locked.is_(True))) is not None
+
+
+@entries_bp.post("")
+@require_role("editor")
 def create_entry():
-    denied = write_access()
-    if denied:
-        return denied
     data = request.get_json(silent=True) or {}
-    date_value = str(data.get("date") or "").strip()
-    name = str(data.get("product_name") or "").strip()
-    if not valid_date(date_value) or not name:
-        return jsonify({"success": False, "error": "נתונים שגויים"}), 400
-    if is_locked(date_value):
-        return jsonify({"success": False, "error": "התקופה נעולה"}), 423
-    product = Product.query.filter_by(name=name).first()
-    if not product:
-        return jsonify({"success": False, "error": "מוצר לא נמצא"}), 404
     try:
-        quantity = float(data.get("quantity"))
-    except (TypeError, ValueError):
-        return jsonify({"success": False, "error": "כמות לא תקינה"}), 400
-    if quantity <= 0:
-        return jsonify({"success": False, "error": "כמות חייבת להיות חיובית"}), 400
-    is_extra = bool(data.get("is_extra", False))
-    selected_price = price_for_date(product, date_value)
-    note = str(data.get("note") or "").strip()[:255] or None
-    try:
-        existing = (
-            DailyEntry.query.filter_by(date=date_value, product_name=product.name, is_extra=is_extra)
-            .order_by(DailyEntry.id.asc()).first()
-        )
-        if existing is not None:
-            effective_price = money(existing.unit_price)
-            existing.quantity = float(existing.quantity or 0) + quantity
-            existing.total_amount = (money(existing.quantity) * effective_price).quantize(Decimal("0.01"))
-            if note:
-                existing.note = note
-            db.session.commit()
-            return jsonify(entry_json(existing))
-        entry = DailyEntry(
-            date=date_value, product_name=product.name, quantity=quantity, is_extra=is_extra,
-            unit_price=selected_price, total_amount=(money(quantity) * selected_price).quantize(Decimal("0.01")), note=note,
-        )
-        db.session.add(entry)
-        db.session.commit()
-        return jsonify(entry_json(entry))
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
+        d = date.fromisoformat(data["date"]); pid = int(data["product_id"]); qty = float(data["quantity"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify(status="error", message="נתוני דיווח לא תקינים"), 400
+    if qty <= 0: return jsonify(status="error", message="הכמות חייבת להיות גדולה מאפס"), 400
+    if _period_locked(g.current_user.tenant_id, d): return jsonify(status="error", message="התקופה נעולה"), 409
+    product = db.session.scalar(select(Product).where(Product.id == pid, Product.tenant_id == g.current_user.tenant_id, Product.is_active.is_(True)))
+    if not product: return jsonify(status="error", message="המוצר לא נמצא או אינו פעיל"), 404
+    etype = data.get("entry_type", "regular")
+    if etype not in {"regular", "extra", "special"}: return jsonify(status="error", message="סוג דיווח לא תקין"), 400
+    price = effective_price(product.id, d)
+    entry = DailyEntry(tenant_id=g.current_user.tenant_id, date=d, product_id=product.id, quantity=qty, price_at_time=price, entry_type=etype, notes=(data.get("notes") or "").strip() or None, recorded_by=g.current_user.id)
+    db.session.add(entry); audit("ENTRY_CREATE", f"{product.name} x {qty} @ {d.isoformat()}"); db.session.commit()
+    return jsonify(status="success", message="החיוב נשמר בהצלחה", id=entry.id, price_at_time=float(price), total=float(price) * qty)
 
 
-@bp.post("/api/entries/copy")
-def copy_entries():
-    """Copy a whole day in one request/transaction instead of one HTTP request per row."""
-    denied = write_access()
-    if denied:
-        return denied
-    data = request.get_json(silent=True) or {}
-    source_date = str(data.get("source_date") or "").strip()
-    target_date = str(data.get("target_date") or "").strip()
-    if not valid_date(source_date) or not valid_date(target_date):
-        return jsonify({"success": False, "error": "תאריך לא תקין"}), 400
-    if is_locked(target_date):
-        return jsonify({"success": False, "error": "תקופת היעד נעולה"}), 423
-    source = DailyEntry.query.filter_by(date=source_date).order_by(DailyEntry.id.asc()).all()
-    if not source:
-        return jsonify({"success": True, "copied": 0})
-
-    names = {e.product_name for e in source}
-    products = {p.name: p for p in Product.query.filter(Product.name.in_(names)).all()}
-    if len(products) != len(names):
-        missing = sorted(names - products.keys())
-        return jsonify({"success": False, "error": f"מוצרים חסרים: {', '.join(missing)}"}), 409
-
-    try:
-        existing_rows = DailyEntry.query.filter_by(date=target_date).all()
-        existing = {(e.product_name, bool(e.is_extra)): e for e in existing_rows}
-        prices = {name: price_for_date(product, target_date) for name, product in products.items()}
-        copied = 0
-        for src in source:
-            key = (src.product_name, bool(src.is_extra))
-            dst = existing.get(key)
-            if dst is not None:
-                dst.quantity = float(dst.quantity or 0) + float(src.quantity or 0)
-                dst.total_amount = (money(dst.quantity) * money(dst.unit_price)).quantize(Decimal("0.01"))
-                if src.note:
-                    dst.note = src.note
-            else:
-                unit_price = prices[src.product_name]
-                dst = DailyEntry(
-                    date=target_date,
-                    product_name=src.product_name,
-                    quantity=float(src.quantity or 0),
-                    is_extra=bool(src.is_extra),
-                    unit_price=unit_price,
-                    total_amount=(money(src.quantity) * unit_price).quantize(Decimal("0.01")),
-                    note=src.note,
-                )
-                db.session.add(dst)
-                existing[key] = dst
-            copied += 1
-        db.session.commit()
-        log_activity("COPY_DAY", f"הועתקו {copied} חיובים מ-{source_date} ל-{target_date}")
-        return jsonify({"success": True, "copied": copied})
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
-
-
-@bp.get("/api/entries/<string:date_value>")
-def get_entries(date_value):
-    if not valid_date(date_value):
-        return jsonify({"error": "תאריך לא תקין"}), 400
-    return jsonify([entry_json(row) for row in DailyEntry.query.filter_by(date=date_value).order_by(DailyEntry.id.asc()).all()])
-
-
-@bp.route("/api/entries/<int:entry_id>", methods=["PUT"])
+@entries_bp.put("/<int:entry_id>")
+@require_role("editor")
 def update_entry(entry_id):
-    denied = write_access()
-    if denied:
-        return denied
-    entry = db.session.get(DailyEntry, entry_id)
-    if not entry:
-        return jsonify({"success": False, "error": "חיוב לא נמצא"}), 404
-    if is_locked(entry.date):
-        return jsonify({"success": False, "error": "התקופה נעולה"}), 423
+    entry = db.session.scalar(select(DailyEntry).where(DailyEntry.id == entry_id, DailyEntry.tenant_id == g.current_user.tenant_id))
+    if not entry: return jsonify(status="error", message="הדיווח לא נמצא"), 404
     data = request.get_json(silent=True) or {}
-    try:
-        quantity = float(data.get("quantity"))
-    except (TypeError, ValueError):
-        return jsonify({"success": False, "error": "כמות לא תקינה"}), 400
-    if quantity <= 0:
-        return jsonify({"success": False, "error": "כמות חייבת להיות חיובית"}), 400
-    try:
-        entry.quantity = quantity
-        entry.total_amount = (money(quantity) * money(entry.unit_price)).quantize(Decimal("0.01"))
-        if "note" in data:
-            entry.note = (str(data.get("note") or "").strip()[:255]) or None
-        if "is_extra" in data:
-            entry.is_extra = bool(data.get("is_extra"))
-        db.session.commit()
-        log_activity("UPDATE_ENTRY", f"עדכון חיוב #{entry.id}: {entry.product_name}, כמות {quantity}")
-        return jsonify(entry_json(entry))
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
+    d = date.fromisoformat(data.get("date", entry.date.isoformat()))
+    if _period_locked(g.current_user.tenant_id, entry.date) or _period_locked(g.current_user.tenant_id, d): return jsonify(status="error", message="התקופה נעולה"), 409
+    qty = float(data.get("quantity", entry.quantity))
+    if qty <= 0: return jsonify(status="error", message="הכמות חייבת להיות גדולה מאפס"), 400
+    etype = data.get("entry_type", entry.entry_type)
+    if etype not in {"regular", "extra", "special"}: return jsonify(status="error", message="סוג דיווח לא תקין"), 400
+    entry.date, entry.quantity, entry.entry_type, entry.notes = d, qty, etype, (data.get("notes", entry.notes) or "").strip() or None
+    entry.price_at_time = effective_price(entry.product_id, d)
+    audit("ENTRY_UPDATE", str(entry.id)); db.session.commit()
+    return jsonify(status="success", message="הדיווח עודכן בהצלחה")
 
 
-@bp.route("/api/entries/<int:entry_id>", methods=["DELETE"])
+@entries_bp.delete("/<int:entry_id>")
+@require_role("editor")
 def delete_entry(entry_id):
-    denied = write_access()
-    if denied:
-        return denied
-    entry = db.session.get(DailyEntry, entry_id)
-    if not entry:
-        return jsonify({"success": False, "error": "חיוב לא נמצא"}), 404
-    if is_locked(entry.date):
-        return jsonify({"success": False, "error": "התקופה נעולה"}), 423
-    try:
-        product_name = entry.product_name
-        db.session.delete(entry)
-        db.session.commit()
-        log_activity("DELETE_ENTRY", f"מחיקת חיוב #{entry_id}: {product_name}")
-        return jsonify({"success": True})
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
+    entry = db.session.scalar(select(DailyEntry).where(DailyEntry.id == entry_id, DailyEntry.tenant_id == g.current_user.tenant_id))
+    if not entry: return jsonify(status="error", message="הדיווח לא נמצא"), 404
+    if _period_locked(g.current_user.tenant_id, entry.date): return jsonify(status="error", message="התקופה נעולה"), 409
+    db.session.delete(entry); audit("ENTRY_DELETE", str(entry.id)); db.session.commit()
+    return jsonify(status="success", message="הדיווח נמחק בהצלחה")
+
+
+@entries_bp.post("/copy")
+@require_role("editor")
+def copy_day():
+    data = request.get_json(silent=True) or {}
+    try: source = date.fromisoformat(data["source_date"]); target = date.fromisoformat(data["target_date"])
+    except (KeyError, ValueError, TypeError): return jsonify(status="error", message="תאריכים לא תקינים"), 400
+    if _period_locked(g.current_user.tenant_id, target): return jsonify(status="error", message="תקופת היעד נעולה"), 409
+    rows = db.session.scalars(select(DailyEntry).where(DailyEntry.tenant_id == g.current_user.tenant_id, DailyEntry.date == source)).all()
+    for old in rows:
+        db.session.add(DailyEntry(tenant_id=old.tenant_id, date=target, product_id=old.product_id, quantity=old.quantity, price_at_time=effective_price(old.product_id, target), entry_type=old.entry_type, notes=old.notes, recorded_by=g.current_user.id))
+    audit("DAY_COPY", f"{source.isoformat()} -> {target.isoformat()} ({len(rows)})"); db.session.commit()
+    return jsonify(status="success", message="היום הועתק בהצלחה", count=len(rows))

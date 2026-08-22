@@ -1,105 +1,45 @@
-from flask import Blueprint, jsonify, request
-from sqlalchemy.exc import SQLAlchemyError
+from flask import Blueprint, request, jsonify, g
+from sqlalchemy import func, select
 from werkzeug.security import generate_password_hash
-
 from ..extensions import db
 from ..models import User
-from ..security import admin_access, log_activity
+from ..security import require_role, audit
 
-bp = Blueprint("users", __name__)
-
-_VALID_ROLES = {"admin", "editor", "viewer"}
+users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 
 
-@bp.post("/api/users/<int:user_id>/reset-password")
-def reset_user_password(user_id):
-    denied = admin_access()
-    if denied:
-        return denied
+@users_bp.post("")
+@require_role("admin")
+def create_user():
     data = request.get_json(silent=True) or {}
-    password = data.get("password") or ""
-    if not isinstance(password, str) or len(password) < 8:
-        return jsonify({"success": False, "error": "סיסמה חייבת להכיל לפחות 8 תווים"}), 400
-    if len(password) > 128:
-        return jsonify({"success": False, "error": "סיסמה ארוכה מדי"}), 400
-    user = db.session.get(User, user_id)
-    if not user:
-        return jsonify({"success": False, "error": "המשתמש לא נמצא"}), 404
-    try:
-        user.password = generate_password_hash(password)
-        db.session.commit()
-        log_activity("USER_PASSWORD_RESET", f"איפוס סיסמה למשתמש: {user.username}")
-        return jsonify({"success": True, "username": user.username})
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
+    email = (data.get("email") or "").strip().lower(); name = (data.get("name") or "").strip(); password = data.get("password") or ""; role = data.get("role", "editor")
+    if not email or not name or len(password) < 8: return jsonify(status="error", message="שם, אימייל וסיסמה של 8 תווים לפחות נדרשים"), 400
+    if role not in {"viewer", "editor", "admin"}: return jsonify(status="error", message="תפקיד לא תקין"), 400
+    if db.session.scalar(select(User.id).where(User.tenant_id == g.current_user.tenant_id, func.lower(User.email) == email)): return jsonify(status="error", message="האימייל כבר קיים"), 409
+    db.session.add(User(tenant_id=g.current_user.tenant_id, email=email, name=name, password_hash=generate_password_hash(password), role=role)); audit("USER_CREATE", email); db.session.commit()
+    return jsonify(status="success", message="המשתמש נוצר בהצלחה"), 201
 
 
-@bp.get("/api/users")
-def list_users():
-    denied = admin_access()
-    if denied:
-        return denied
-    return jsonify([{"id": u.id, "username": u.username, "role": u.role} for u in User.query.order_by(User.username.asc()).all()])
+@users_bp.put("/<int:user_id>")
+@require_role("admin")
+def update_user(user_id):
+    user = db.session.scalar(select(User).where(User.id == user_id, User.tenant_id == g.current_user.tenant_id))
+    if not user: return jsonify(status="error", message="המשתמש לא נמצא"), 404
+    data = request.get_json(silent=True) or {}; role = data.get("role", user.role)
+    if role not in {"viewer", "editor", "admin"}: return jsonify(status="error", message="תפקיד לא תקין"), 400
+    if user.id == g.current_user.id and role != "admin": return jsonify(status="error", message="לא ניתן להוריד את מנהל המערכת המחובר"), 409
+    user.name = (data.get("name") or user.name).strip(); user.role = role
+    if data.get("password"):
+        if len(data["password"]) < 8: return jsonify(status="error", message="סיסמה קצרה מדי"), 400
+        user.password_hash = generate_password_hash(data["password"])
+    audit("USER_UPDATE", user.email); db.session.commit(); return jsonify(status="success", message="פרטי המשתמש עודכנו")
 
 
-@bp.post("/api/users")
-def create_or_update_user():
-    denied = admin_access()
-    if denied:
-        return denied
-    data = request.get_json(silent=True) or {}
-    username = str(data.get("username") or "").strip()[:100]
-    password = data.get("password") or ""
-    role = str(data.get("role") or "").strip()
-    if not username or role not in _VALID_ROLES:
-        return jsonify({"success": False, "error": "נתונים שגויים"}), 400
-    user = User.query.filter_by(username=username).first()
-    try:
-        if user:
-            # Never allow an update to remove the last administrative account.
-            if user.role == "admin" and role != "admin" and User.query.filter_by(role="admin").count() <= 1:
-                return jsonify({"success": False, "error": "לא ניתן להוריד את מנהל המערכת האחרון מהרשאת מנהל"}), 400
-            user.role = role
-            if password:
-                if not isinstance(password, str) or len(password) < 8:
-                    return jsonify({"success": False, "error": "סיסמה חייבת להכיל לפחות 8 תווים"}), 400
-                if len(password) > 128:
-                    return jsonify({"success": False, "error": "סיסמה ארוכה מדי"}), 400
-                user.password = generate_password_hash(password)
-            db.session.commit()
-            log_activity("USER_UPDATED", f"עודכן משתמש: {username} ({role})")
-            return jsonify({"success": True, "id": user.id, "username": user.username, "role": user.role})
-        if not password or not isinstance(password, str) or len(password) < 8:
-            return jsonify({"success": False, "error": "סיסמה חייבת להכיל לפחות 8 תווים"}), 400
-        if len(password) > 128:
-            return jsonify({"success": False, "error": "סיסמה ארוכה מדי"}), 400
-        new_user = User(username=username, password=generate_password_hash(password), role=role)
-        db.session.add(new_user)
-        db.session.commit()
-        log_activity("USER_CREATED", f"נוצר משתמש: {username} ({role})")
-        return jsonify({"success": True, "id": new_user.id, "username": new_user.username, "role": new_user.role})
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
-
-
-@bp.route("/api/users/<int:user_id>", methods=["DELETE"])
+@users_bp.delete("/<int:user_id>")
+@require_role("admin")
 def delete_user(user_id):
-    denied = admin_access()
-    if denied:
-        return denied
-    user = db.session.get(User, user_id)
-    if not user:
-        return jsonify({"success": False, "error": "המשתמש לא נמצא"}), 404
-    if user.role == "admin" and User.query.filter_by(role="admin").count() <= 1:
-        return jsonify({"success": False, "error": "לא ניתן למחוק את מנהל המערכת האחרון"}), 400
-    try:
-        username = user.username
-        db.session.delete(user)
-        db.session.commit()
-        log_activity("USER_DELETED", f"נמחק משתמש: {username}")
-        return jsonify({"success": True})
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({"success": False, "error": "שגיאת שרת"}), 500
+    user = db.session.scalar(select(User).where(User.id == user_id, User.tenant_id == g.current_user.tenant_id))
+    if not user: return jsonify(status="error", message="המשתמש לא נמצא"), 404
+    if user.id == g.current_user.id: return jsonify(status="error", message="לא ניתן למחוק את המשתמש הנוכחי"), 409
+    if user.role == "admin" and db.session.scalar(select(func.count(User.id)).where(User.tenant_id == user.tenant_id, User.role == "admin", User.is_active.is_(True))) <= 1: return jsonify(status="error", message="לא ניתן למחוק את מנהל המערכת האחרון"), 409
+    user.is_active = False; audit("USER_DELETE", user.email); db.session.commit(); return jsonify(status="success", message="המשתמש הושבת")
