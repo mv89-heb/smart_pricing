@@ -105,3 +105,11 @@ def test_feature_scripts_are_scoped_to_their_own_modules():
     assert "browser-price-sync.js" not in dashboard
     assert "global-filters.js" not in settings
     assert "app-shell-stability.js" not in reports
+
+
+def test_price_scheduling_has_scoped_observer_and_single_bulk_owner():
+    source = Path(app.static_folder, "price-scheduling.js").read_text(encoding="utf-8")
+    assert "observer.observe(panel" in source
+    assert "observer.observe(document.body" not in source
+    assert "const original = window.bulkUpdatePrices" not in source
+    assert "window.bulkUpdatePrices.__stable = true" in source
