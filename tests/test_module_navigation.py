@@ -75,3 +75,11 @@ def test_ux_state_styles_exist_for_core_workspaces():
     assert "אין מוצרים להצגה" in css
     assert "אין חיובים להצגה ליום שנבחר" in css
     assert ".module-shell-reports-page #empty" in css
+
+
+def test_product_form_stability_has_one_owner():
+    stable = Path(app.static_folder, "app-shell-stability.js").read_text(encoding="utf-8")
+    ui = Path(app.static_folder, "ui-stability.js").read_text(encoding="utf-8")
+    assert "function fixProductFormReset" not in stable
+    assert "window.cancelProductEdit" in ui
+    assert "function fixBulkUpdate" in stable
