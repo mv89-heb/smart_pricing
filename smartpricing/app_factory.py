@@ -87,12 +87,19 @@ def create_app():
 
     @app.after_request
     def inject_frontend_assets(response):
-        """Inject shared shell CSS and only the JS owned by this module."""
+        """Inject shared shell CSS and only the JS/CSS owned by this module."""
         if "text/html" not in response.headers.get("Content-Type", ""):
             return response
         try:
             body = response.get_data(as_text=True)
-            for asset in ('<link rel="stylesheet" href="/static/responsive-layout.css?v=1">', '<link rel="stylesheet" href="/static/module-shell.css?v=1">', '<link rel="stylesheet" href="/static/module-shell-polish.css?v=1">'):
+            css_assets = [
+                '<link rel="stylesheet" href="/static/responsive-layout.css?v=1">',
+                '<link rel="stylesheet" href="/static/module-shell.css?v=1">',
+                '<link rel="stylesheet" href="/static/module-shell-polish.css?v=1">',
+            ]
+            if request.path == "/periodic-report":
+                css_assets.append('<link rel="stylesheet" href="/static/reports-module.css?v=1">')
+            for asset in css_assets:
                 if asset not in body and "</head>" in body:
                     body = body.replace("</head>", asset + "</head>", 1)
             for script in _module_scripts(request.path):
