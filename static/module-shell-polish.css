@@ -23,6 +23,13 @@
 .module-shell-pricing #price-list-table-body button,.module-shell-daily #entries-table-body button{min-width:34px;min-height:34px;border-radius:9px}
 .module-shell-daily .mobile-product-picker-trigger{min-height:42px!important;border-radius:10px!important}
 .module-shell-daily .toast,.module-shell-pricing .toast{z-index:200!important}
+/* Consistent loading, empty and disabled states. */
+.ui-action-busy{pointer-events:none!important;cursor:wait!important;opacity:.78!important;filter:saturate(.7)!important}.ui-action-busy .fa-spinner{margin-inline-end:5px}.module-shell-ready button:disabled{cursor:not-allowed!important;opacity:.55!important}
+.module-shell-pricing #price-list-table-body:empty:after{content:'אין מוצרים להצגה';display:block;text-align:center;padding:36px 16px;color:var(--shell-muted);font-size:13px;font-weight:800}
+.module-shell-daily #entries-table-body:empty:after{content:'אין חיובים להצגה ליום שנבחר';display:block;text-align:center;padding:36px 16px;color:var(--shell-muted);font-size:13px;font-weight:800}
+.module-shell-reports-page #empty{border:1px dashed var(--shell-border);border-radius:14px;background:var(--shell-bg);color:var(--shell-muted)}
+.module-shell-reports-page #empty:before{content:'\f03a';font-family:'Font Awesome 6 Free';font-weight:900;font-size:24px;margin-bottom:8px;opacity:.55}
+.module-shell-pricing .module-shell-hidden-row,.module-shell-daily .module-shell-hidden-row{display:none!important}
 @media(max-width:900px){.module-shell-daily #entry-form,.module-shell-pricing #product-form{padding:13px!important}.module-shell-daily #entry-form .grid,.module-shell-pricing #product-form .grid{grid-template-columns:1fr!important}.module-shell-daily #entry-form button[type=submit],.module-shell-pricing #product-submit-btn{width:100%!important}.module-shell-pricing #price-list-table-body td,.module-shell-pricing #price-list-table-body th{padding-left:8px!important;padding-right:8px!important}.module-shell-daily #entries-table-body td,.module-shell-daily #entries-table-body th{white-space:nowrap}.module-shell-daily .overflow-x-auto{scrollbar-width:thin}}
 @media(max-width:520px){.module-shell-pricing #price-list-table-body .text-xs{font-size:11px}.module-shell-daily #entry-form input,.module-shell-daily #entry-form select,.module-shell-pricing #product-form input,.module-shell-pricing #product-form select{min-height:44px!important}}
 @media(prefers-reduced-motion:reduce){.module-shell-daily #entry-form button,.module-shell-pricing #product-submit-btn{transition:none!important}}
