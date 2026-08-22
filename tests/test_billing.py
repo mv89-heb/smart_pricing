@@ -5,7 +5,9 @@ os.environ.setdefault("FLASK_ENV", "development")
 os.environ.setdefault("DATABASE_URL", "sqlite:///test_billing.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
-from wsgi import app, db, DailyEntry
+from wsgi import app
+from smartpricing.extensions import db
+from smartpricing.models import DailyEntry
 
 
 def auth(client, role="admin"):
