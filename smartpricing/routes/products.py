@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from flask import Blueprint, jsonify, request
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -9,6 +11,32 @@ from ..services.pricing import price_history_json
 from ..utils import money, today_iso, valid_date
 
 bp = Blueprint("products", __name__)
+
+
+def _actor():
+    return request.environ.get("REMOTE_USER") or "מערכת"
+
+
+def _upsert_price_history(product, price, effective, actor):
+    """Single owner for creating/updating a price-history record."""
+    existing = (
+        PriceHistory.query.filter_by(product_id=product.id, effective_from=effective)
+        .order_by(PriceHistory.id.desc())
+        .first()
+    )
+    if existing:
+        existing.price = price
+        existing.changed_at = datetime.utcnow()
+        existing.changed_by = actor
+        return existing
+    row = PriceHistory(
+        product_id=product.id,
+        price=price,
+        effective_from=effective,
+        changed_by=actor,
+    )
+    db.session.add(row)
+    return row
 
 
 @bp.get("/api/products")
@@ -32,9 +60,6 @@ def get_product_details():
 
 @bp.get("/api/products/<path:product_name>/history")
 def get_product_history(product_name):
-    """Previously missing - static/price-scheduling.js calls this to work out
-    which price was in effect on a given date while composing a new entry
-    (effectivePrice()), and had no backend route to hit."""
     product = Product.query.filter_by(name=product_name).first()
     if not product:
         return jsonify({"error": "מוצר לא נמצא"}), 404
@@ -47,7 +72,7 @@ def add_product():
     if denied:
         return denied
     data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()
+    name = (data.get("name") or "").strip()[:100]
     tag = (data.get("tag") or "").strip()[:80]
     try:
         price = money(data.get("price"))
@@ -60,11 +85,12 @@ def add_product():
         return jsonify({"success": False, "error": "מוצר חדש חייב להתחיל במחיר תקף מהיום. ניתן לתזמן שינוי מחיר למוצר קיים."}), 400
     if Product.query.filter_by(name=name).first():
         return jsonify({"success": False, "error": "מוצר קיים"}), 409
+    actor = _actor()
     try:
         p = Product(name=name, price=price, tag=tag or None)
         db.session.add(p)
         db.session.flush()
-        db.session.add(PriceHistory(product_id=p.id, price=price, effective_from=effective, changed_by=request.environ.get("REMOTE_USER") or "מערכת"))
+        _upsert_price_history(p, price, effective, actor)
         db.session.commit()
         log_activity("NEW_PRODUCT", f"מוצר חדש: {name}, מחיר {price}, תקף מ-{effective}")
         return jsonify({"success": True})
@@ -73,10 +99,8 @@ def add_product():
         return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 
-@bp.route("/api/products/<path:product_name>", methods=["PUT"])
+@bp.put("/api/products/<path:product_name>")
 def update_product(product_name):
-    from datetime import datetime
-
     denied = write_access()
     if denied:
         return denied
@@ -103,17 +127,7 @@ def update_product(product_name):
     try:
         old_name = product.name
         product.name = name
-        existing = (
-            PriceHistory.query.filter_by(product_id=product.id, effective_from=effective)
-            .order_by(PriceHistory.id.desc())
-            .first()
-        )
-        if existing:
-            existing.price = price
-            existing.changed_at = datetime.utcnow()
-            existing.changed_by = request.environ.get("REMOTE_USER") or "מערכת"
-        else:
-            db.session.add(PriceHistory(product_id=product.id, price=price, effective_from=effective, changed_by="מערכת"))
+        _upsert_price_history(product, price, effective, _actor())
         if effective <= today_iso():
             product.price = price
         db.session.commit()
@@ -124,7 +138,7 @@ def update_product(product_name):
         return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 
-@bp.route("/api/products/<path:product_name>/scheduled", methods=["DELETE"])
+@bp.delete("/api/products/<path:product_name>/scheduled")
 def cancel_scheduled_prices(product_name):
     denied = write_access()
     if denied:
@@ -147,14 +161,8 @@ def cancel_scheduled_prices(product_name):
         return jsonify({"success": False, "error": "שגיאת שרת"}), 500
 
 
-@bp.route("/api/products/<path:product_name>", methods=["DELETE"])
+@bp.delete("/api/products/<path:product_name>")
 def delete_product(product_name):
-    """Previously missing - the price list's delete button
-    (deleteProduct() in templates/index.html) had no backend route to hit.
-    Deleting a product does not touch previously recorded daily_entry rows -
-    each entry already stores its own unit_price/total_amount snapshot at the
-    time it was created, independent of the product's current price, exactly
-    like changing a product's price does not affect past entries."""
     denied = write_access()
     if denied:
         return denied

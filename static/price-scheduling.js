@@ -131,7 +131,6 @@
 
   function installBulkUpdate() {
     if (typeof window.bulkUpdatePrices !== 'function' || window.bulkUpdatePrices.__stable) return;
-    const original = window.bulkUpdatePrices;
     window.bulkUpdatePrices = async function () {
       if (!window.products || !Object.keys(window.products).length) return toast('המחירון ריק', 'error');
       const promptFn = window.customPrompt;
@@ -167,7 +166,27 @@
     refreshScheduledPanel();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
-  const observer = new MutationObserver(() => { installEffectiveDate(); installProductSubmit(); installPreviewSync(); installBulkUpdate(); });
-  observer.observe(document.body, { childList: true, subtree: true });
+
+  let observerInstalled = false;
+  const observeRightPanel = () => {
+    const panel = $('right-panel');
+    if (!panel || observerInstalled) return;
+    observerInstalled = true;
+    const observer = new MutationObserver(() => {
+      installEffectiveDate();
+      installProductSubmit();
+      installPreviewSync();
+      installBulkUpdate();
+    });
+    observer.observe(panel, { childList: true, subtree: true });
+  };
+  observeRightPanel();
+  if (!observerInstalled) {
+    const bootstrap = new MutationObserver(() => {
+      if (!observerInstalled) observeRightPanel();
+      if (observerInstalled) bootstrap.disconnect();
+    });
+    bootstrap.observe(document.body, { childList: true, subtree: true });
+  }
   window.refreshScheduledPrices = refreshScheduledPanel;
 })();
