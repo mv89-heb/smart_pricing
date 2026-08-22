@@ -1,0 +1,41 @@
+/* Hard module boundary: after the shell is ready, only the active shell and its workspace may remain visible. */
+body.module-shell-ready > .module-shell-sidebar,
+body.module-shell-ready > .module-shell-main,
+body.module-shell-ready > .module-shell-mobile-nav {
+  display: block;
+}
+
+body.module-shell-ready > :not(.module-shell-sidebar):not(.module-shell-main):not(.module-shell-mobile-nav) {
+  display: none !important;
+}
+
+.module-shell-main {
+  min-width: 0;
+}
+
+.module-shell-legacy-page {
+  min-width: 0;
+}
+
+.module-shell-legacy-root {
+  min-width: 0;
+}
+
+/* Defensive boundary for legacy page chrome that was historically rendered inside modules. */
+.module-shell-legacy-header,
+.module-shell-legacy-root > .legacy-header,
+.module-shell-legacy-root > .page-header,
+.module-shell-legacy-root > .old-header,
+.module-shell-legacy-root > .old-navigation {
+  display: none !important;
+}
+
+/* The shell owns the page heading; module content owns everything below it. */
+.module-shell-page-frame > header:first-child,
+.module-shell-page-frame > nav:first-child {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .module-shell-main { padding-bottom: 76px; }
+}

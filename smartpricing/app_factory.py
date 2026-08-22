@@ -31,14 +31,14 @@ def _asset(path, version):
 
 
 def _module_scripts(path):
-    """Load feature JS only in the workspace that owns it."""
-    common = [_asset("module-shell.js", 1)]
+    """Load only the feature assets owned by the active workspace."""
+    common = [_asset("module-shell.js", 2), _asset("table-filters.js", 1)]
     if path == "/":
-        return common + [_asset("period-report-loader.js", 4), _asset("global-filters.js", 4), _asset("browser-price-sync.js", 6), _asset("mobile-product-picker.js", 2), _asset("ui-stability.js", 3), _asset("app-shell-stability.js", 3), _asset("report-sort.js", 1)]
+        return common + [_asset("period-report-loader.js", 4), _asset("browser-price-sync.js", 6), _asset("mobile-product-picker.js", 2), _asset("ui-stability.js", 3), _asset("app-shell-stability.js", 3), _asset("report-sort.js", 1)]
     if path == "/periodic-report":
-        return common + [_asset("reports-module.js", 1)]
+        return common + [_asset("reports-module.js", 2)]
     if path == "/settings":
-        return common + [_asset("password-reset.js", 4)]
+        return [_asset("module-shell.js", 2), _asset("password-reset.js", 4)]
     if path == "/static/dashboard.html":
         return common
     return common
@@ -86,7 +86,7 @@ def create_app():
 
     @app.after_request
     def inject_frontend_assets(response):
-        """Inject shared shell CSS and only the JS/CSS owned by this module."""
+        """Inject shared shell CSS and only the assets owned by this module."""
         if "text/html" not in response.headers.get("Content-Type", ""):
             return response
         try:
@@ -95,11 +95,12 @@ def create_app():
             body = response.get_data(as_text=True)
             css_assets = [
                 '<link rel="stylesheet" href="/static/responsive-layout.css?v=1">',
-                '<link rel="stylesheet" href="/static/module-shell.css?v=1">',
+                '<link rel="stylesheet" href="/static/module-shell.css?v=2">',
                 '<link rel="stylesheet" href="/static/module-shell-polish.css?v=1">',
+                '<link rel="stylesheet" href="/static/module-isolation.css?v=1">',
             ]
             if request.path == "/periodic-report":
-                css_assets.append('<link rel="stylesheet" href="/static/reports-module.css?v=2">')
+                css_assets.append('<link rel="stylesheet" href="/static/reports-module.css?v=3">')
             for asset in css_assets:
                 if asset not in body and "</head>" in body:
                     body = body.replace("</head>", asset + "</head>", 1)

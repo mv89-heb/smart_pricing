@@ -65,9 +65,11 @@ def test_periodic_report_injects_unified_controller():
     response = client.get("/periodic-report")
     body = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert "/static/reports-module.js?v=1" in body
-    assert "/static/reports-controls.js?v=1" not in body
-    assert "/static/reports-summary.js?v=1" not in body
+    assert "/static/reports-module.js?v=2" in body
+    assert "/static/table-filters.js?v=1" in body
+    assert "/static/reports-controls.js" not in body
+    assert "/static/reports-summary.js" not in body
+    assert "/static/global-filters.js" not in body
 
 
 def test_drawer_contract_and_accessible_controls_exist():

@@ -26,9 +26,10 @@ def test_module_shell_assets_are_injected_into_settings_page():
     response = client.get("/settings")
     body = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert "/static/module-shell.css?v=1" in body
+    assert "/static/module-shell.css?v=2" in body
     assert "/static/module-shell-polish.css?v=1" in body
-    assert "/static/module-shell.js?v=1" in body
+    assert "/static/module-isolation.css?v=1" in body
+    assert "/static/module-shell.js?v=2" in body
 
 
 def test_main_navigation_urls_are_present_in_shell_asset():
@@ -63,12 +64,15 @@ def test_periodic_report_keeps_its_module_shell_assets():
     response = client.get("/periodic-report")
     body = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert "/static/module-shell.css?v=1" in body
+    assert "/static/module-shell.css?v=2" in body
     assert "/static/module-shell-polish.css?v=1" in body
-    assert "/static/module-shell.js?v=1" in body
-    assert "/static/reports-module.js?v=1" in body
-    assert "/static/reports-controls.js?v=1" not in body
-    assert "/static/reports-summary.js?v=1" not in body
+    assert "/static/module-isolation.css?v=1" in body
+    assert "/static/module-shell.js?v=2" in body
+    assert "/static/table-filters.js?v=1" in body
+    assert "/static/reports-module.js?v=2" in body
+    assert "/static/reports-controls.js" not in body
+    assert "/static/reports-summary.js" not in body
+    assert "/static/global-filters.js" not in body
 
 
 def test_periodic_report_is_a_reports_workspace_not_a_second_shell():
@@ -120,17 +124,20 @@ def test_feature_scripts_are_scoped_to_their_own_modules():
     dashboard = paths(_module_scripts("/static/dashboard.html"))
     settings = paths(_module_scripts("/settings"))
 
-    assert "module-shell.js" in daily and "global-filters.js" in daily
-    assert "module-shell.js" in reports and "reports-module.js" in reports
+    for scripts in (daily, reports, dashboard):
+        assert "module-shell.js" in scripts
+        assert "table-filters.js" in scripts
+    assert "reports-module.js" in reports
     assert "reports-controls.js" not in reports
     assert "reports-summary.js" not in reports
-    assert "module-shell.js" in dashboard
+    assert "global-filters.js" not in daily
+    assert "global-filters.js" not in reports
+    assert "global-filters.js" not in settings
     assert "module-shell.js" in settings and "password-reset.js" in settings
     assert "report-sort.js" not in reports
     assert "report-sort.js" not in settings
     assert "browser-price-sync.js" not in reports
     assert "browser-price-sync.js" not in dashboard
-    assert "global-filters.js" not in settings
     assert "app-shell-stability.js" not in reports
 
 
