@@ -1,5 +1,4 @@
-from flask import (Blueprint, jsonify, make_response, redirect, render_template,
-                    request, send_from_directory, session, url_for)
+from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
 from ..models import User
@@ -8,39 +7,33 @@ from ..security import log_activity, login_rate_limited
 bp = Blueprint("pages", __name__)
 
 
-def _inject_page_assets(html):
-    """Attach page-level assets without mixing module markup into templates."""
-    if "</head>" not in html:
-        return html
-    assets = (
-        '<link rel="stylesheet" href="/static/daily-module-focus.css?v=1">'
-        '<script src="/static/daily-module-focus.js?v=1" defer></script>'
-    )
-    return html.replace("</head>", assets + "</head>", 1)
+def _module(template, module, title):
+    return render_template(template, active_module=module, module_title=title)
 
 
 @bp.route("/")
 def index():
-    html = render_template("index.html")
-    html = _inject_page_assets(html)
-    if "</body>" in html:
-        html = html.replace(
-            "</body>",
-            '<script src="/static/ux-enhancements.js?v=2" defer></script>'
-            '<script src="/static/price-scheduling.js?v=2" defer></script></body>',
-        )
-    return make_response(html)
+    return _module("modules/daily.html", "daily", "דיווח יומי")
+
+
+@bp.route("/pricing")
+def pricing():
+    return _module("modules/pricing.html", "pricing", "מחירון")
+
+
+@bp.route("/dashboard")
+def dashboard():
+    return _module("modules/dashboard.html", "dashboard", "דשבורד")
 
 
 @bp.route("/periodic-report")
 def periodic_report():
-    from flask import current_app
-    return send_from_directory(current_app.static_folder, "periodic_report.html")
+    return _module("modules/reports.html", "reports", "דוחות")
 
 
 @bp.route("/settings")
 def settings():
-    return render_template("settings.html")
+    return _module("settings.html", "settings", "הגדרות")
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -78,5 +71,4 @@ def logout():
 
 @bp.get("/api/current_user")
 def current_user():
-    """Return the current session user for the shell and page UI."""
     return jsonify({"username": session.get("username"), "role": session.get("role", "viewer")})
