@@ -36,6 +36,8 @@ def test_dashboard_and_periodic_pages_are_available_after_login():
     dashboard = client.get("/static/dashboard.html")
     periodic = client.get("/periodic-report")
     assert dashboard.status_code == 200
-    assert "dashboard-module" in dashboard.get_data(as_text=True).lower() or "דשבורד" in dashboard.get_data(as_text=True)
+    dashboard_body = dashboard.get_data(as_text=True)
+    assert 'id="monthTotal"' in dashboard_body
+    assert 'id="trend"' in dashboard_body
     assert periodic.status_code == 200
     assert "דוח חיובים חודשי ותקופתי" in periodic.get_data(as_text=True)
