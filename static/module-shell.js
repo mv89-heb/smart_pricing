@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  if (window.__smartPricingModuleShell) return;
+  if (window.__smartPricingModuleShell || window.location.pathname === '/login') return;
   window.__smartPricingModuleShell = true;
 
   const modules = {
@@ -116,7 +116,7 @@
     main.classList.add('module-shell-content');
   }
 
-  function setupLegacyPage(active) {
+  function setupLegacyPage() {
     const root = document.body.firstElementChild;
     if (!root) return;
     root.classList.add('module-shell-legacy-root');
@@ -129,7 +129,7 @@
     content.appendChild(root);
   }
 
-  function setupSettings(active) {
+  function setupSettings() {
     const root = document.getElementById('settings-page');
     if (root) root.classList.add('module-shell-settings');
   }
@@ -154,8 +154,8 @@
     main.appendChild(createTopbar(active));
 
     if (window.location.pathname === '/') setupIndex(active);
-    else if (active === 'settings') setupSettings(active);
-    else setupLegacyPage(active);
+    else if (active === 'settings') setupSettings();
+    else setupLegacyPage();
 
     if (window.location.pathname === '/') {
       const app = document.querySelector('.app-ui');
@@ -168,11 +168,6 @@
     document.body.prepend(main);
     document.body.prepend(sidebar);
     document.body.appendChild(createMobileNav(active));
-
-    if (active === 'pricing') {
-      const right = document.getElementById('right-panel');
-      if (right) right.scrollIntoView({block:'start'});
-    }
 
     const title = document.querySelector('title');
     if (title) title.textContent = `${modules[active].label} | Smart Pricing`;
