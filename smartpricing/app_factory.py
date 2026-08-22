@@ -36,9 +36,8 @@ def _module_scripts(path):
     if path == "/":
         return common + [_asset("period-report-loader.js", 4), _asset("global-filters.js", 4), _asset("browser-price-sync.js", 6), _asset("mobile-product-picker.js", 2), _asset("ui-stability.js", 3), _asset("app-shell-stability.js", 3), _asset("report-sort.js", 1)]
     if path == "/periodic-report":
-        return common
+        return common + [_asset("reports-controls.js", 1)]
     if path == "/settings":
-        # Settings owns its controller; report sorting has no consumer here.
         return common + [_asset("password-reset.js", 4)]
     if path == "/static/dashboard.html":
         return common
