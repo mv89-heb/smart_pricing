@@ -1,7 +1,9 @@
-"""Backward-compatible shim - UI/system routes now live in smartpricing/routes/.
-Kept so `from wsgi_ui import app` (tests) still works, exposing the same
-`User`/`admin_access` names those tests import."""
-from wsgi import app  # noqa: F401
+"""Backward-compatible UI/system shim.
 
-from smartpricing.models import User  # noqa: F401
-from smartpricing.security import admin_access  # noqa: F401
+The canonical app is built directly from smartpricing.app_factory.
+"""
+from smartpricing.app_factory import create_app
+from smartpricing.models import User
+from smartpricing.security import admin_access
+
+app = create_app()

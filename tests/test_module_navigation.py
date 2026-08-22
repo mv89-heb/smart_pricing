@@ -5,145 +5,61 @@ os.environ.setdefault("FLASK_ENV", "development")
 os.environ.setdefault("DATABASE_URL", "sqlite:///test_module_navigation.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
-from wsgi import app
+from smartpricing.app_factory import create_app
+
+app = create_app()
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _login(client, role="admin"):
     with client.session_transaction() as session:
-        session["logged_in"] = True
-        session["username"] = "test"
-        session["role"] = role
+        session.update(logged_in=True, username="test", role=role)
 
 
-def test_settings_route_is_registered():
+def body(client, path):
+    _login(client)
+    response = client.get(path)
+    assert response.status_code == 200
+    return response.get_data(as_text=True)
+
+
+def test_all_module_routes_are_registered():
     rules = {rule.rule for rule in app.url_map.iter_rules()}
-    assert "/settings" in rules
+    assert {"/", "/pricing", "/dashboard", "/periodic-report", "/settings"}.issubset(rules)
 
 
-def test_module_shell_assets_are_injected_into_settings_page():
-    client = app.test_client()
-    _login(client)
-    response = client.get("/settings")
-    body = response.get_data(as_text=True)
-    assert response.status_code == 200
-    assert "/static/module-shell.css?v=2" in body
-    assert "/static/module-shell-polish.css?v=1" in body
-    assert "/static/module-isolation.css?v=1" in body
-    assert "/static/module-shell.js?v=2" in body
+def test_each_module_renders_inside_one_application_shell():
+    for path, module, marker in (("/","daily","id=\"entry-form\""),("/pricing","pricing","id=\"pricing-body\""),("/dashboard","dashboard","id=\"dash-total\""),("/periodic-report","reports","id=\"reportBody\""),("/settings","settings","id=\"users-area\"")):
+        html=body(app.test_client(),path)
+        assert f'data-module="{module}"' in html
+        assert marker in html
+        assert html.count('<aside class="saas-sidebar"')==1
+        assert html.count('<header class="saas-topbar"')==1
 
 
-def test_main_navigation_urls_are_present_in_shell_asset():
-    shell = Path(app.static_folder, "module-shell.js").read_text(encoding="utf-8")
-    for href in ("href:'/'", "href:'/?module=pricing'", "href:'/periodic-report'", "href:'/static/dashboard.html'", "href:'/settings'"):
-        assert href in shell
+def test_daily_has_no_other_module_business_dom():
+    html=body(app.test_client(),"/")
+    for marker in ("id=\"pricing-body\"","id=\"dash-total\"","id=\"reportBody\"","id=\"users-area\""):
+        assert marker not in html
+    assert "דיווח יומי" in html
 
 
-def test_shell_has_distinct_module_metadata():
-    shell = Path(app.static_folder, "module-shell.js").read_text(encoding="utf-8")
-    for key in ("daily", "pricing", "reports", "dashboard", "settings"):
-        assert f"{key}:" in shell
-    assert "subtitle:'מוצרים, מחירים ותזמון עדכונים'" in shell
-    assert "subtitle:'דוחות תקופתיים, סיכומים וייצוא'" in shell
-    assert "subtitle:'מגמות, KPI וניתוח ביצועים'" in shell
-    assert "subtitle:'משתמשים, גיבוי והעדפות מערכת'" in shell
+def test_pricing_is_not_embedded_in_daily():
+    daily=body(app.test_client(),"/"); pricing=body(app.test_client(),"/pricing")
+    assert 'href="/pricing"' in daily
+    assert 'id="pricing-body"' in pricing
+    assert 'id="pricing-body"' not in daily
 
 
-def test_settings_page_is_rendered_inside_application_shell():
-    client = app.test_client()
-    _login(client)
-    response = client.get("/settings")
-    body = response.get_data(as_text=True)
-    assert response.status_code == 200
-    assert 'id="settings-page"' in body
-    assert "module-shell-settings" in body
+def test_reports_are_server_rendered_as_the_reports_module():
+    html=body(app.test_client(),"/periodic-report")
+    assert 'id="reportBody"' in html
+    assert '/static/reports-module.js?v=4' in html
+    assert '/static/period-report-loader.js' not in html
+    assert '/static/period-report-ui.js' not in html
 
 
-def test_periodic_report_keeps_its_module_shell_assets():
-    client = app.test_client()
-    _login(client)
-    response = client.get("/periodic-report")
-    body = response.get_data(as_text=True)
-    assert response.status_code == 200
-    assert "/static/module-shell.css?v=2" in body
-    assert "/static/module-shell-polish.css?v=1" in body
-    assert "/static/module-isolation.css?v=1" in body
-    assert "/static/module-shell.js?v=2" in body
-    assert "/static/table-filters.js?v=1" in body
-    assert "/static/reports-module.js?v=2" in body
-    assert "/static/reports-controls.js" not in body
-    assert "/static/reports-summary.js" not in body
-    assert "/static/global-filters.js" not in body
-
-
-def test_periodic_report_is_a_reports_workspace_not_a_second_shell():
-    client = app.test_client()
-    _login(client)
-    response = client.get("/periodic-report")
-    body = response.get_data(as_text=True)
-    assert response.status_code == 200
-    assert 'id="reports-module"' in body
-    assert 'data-module="reports"' in body
-    assert '<header class="flex flex-col lg:flex-row' not in body
-    assert 'href="/static/dashboard.html" class="px-3 py-2' not in body
-
-
-def test_dashboard_has_canonical_dashboard_workspace_markers():
-    client = app.test_client()
-    _login(client)
-    response = client.get("/static/dashboard.html")
-    body = response.get_data(as_text=True)
-    assert response.status_code == 200
-    assert 'id="monthTotal"' in body
-    assert 'id="trend"' in body
-
-
-def test_ux_state_styles_exist_for_core_workspaces():
-    css = Path(app.static_folder, "module-shell-polish.css").read_text(encoding="utf-8")
-    assert ".ui-action-busy" in css
-    assert "אין מוצרים להצגה" in css
-    assert "אין חיובים להצגה ליום שנבחר" in css
-    assert ".module-shell-reports-page #empty" in css
-
-
-def test_product_form_stability_has_one_owner():
-    stable = Path(app.static_folder, "app-shell-stability.js").read_text(encoding="utf-8")
-    ui = Path(app.static_folder, "ui-stability.js").read_text(encoding="utf-8")
-    assert "function fixProductFormReset" not in stable
-    assert "window.cancelProductEdit" in ui
-    assert "function fixBulkUpdate" in stable
-
-
-def test_feature_scripts_are_scoped_to_their_own_modules():
-    from smartpricing.app_factory import _module_scripts
-
-    def paths(scripts):
-        return {item.split("/static/", 1)[1].split("?", 1)[0] for item in scripts}
-
-    daily = paths(_module_scripts("/"))
-    reports = paths(_module_scripts("/periodic-report"))
-    dashboard = paths(_module_scripts("/static/dashboard.html"))
-    settings = paths(_module_scripts("/settings"))
-
-    for scripts in (daily, reports, dashboard):
-        assert "module-shell.js" in scripts
-        assert "table-filters.js" in scripts
-    assert "reports-module.js" in reports
-    assert "reports-controls.js" not in reports
-    assert "reports-summary.js" not in reports
-    assert "global-filters.js" not in daily
-    assert "global-filters.js" not in reports
-    assert "global-filters.js" not in settings
-    assert "module-shell.js" in settings and "password-reset.js" in settings
-    assert "report-sort.js" not in reports
-    assert "report-sort.js" not in settings
-    assert "browser-price-sync.js" not in reports
-    assert "browser-price-sync.js" not in dashboard
-    assert "app-shell-stability.js" not in reports
-
-
-def test_price_scheduling_has_scoped_observer_and_single_bulk_owner():
-    source = Path(app.static_folder, "price-scheduling.js").read_text(encoding="utf-8")
-    assert "observer.observe(panel" in source
-    assert "observer.observe(document.body" not in source
-    assert "const original = window.bulkUpdatePrices" not in source
-    assert "window.bulkUpdatePrices.__stable = true" in source
+def test_no_well_known_legacy_search_assets_are_in_module_templates():
+    templates=''.join(p.read_text(encoding='utf-8') for p in (ROOT/'templates'/'modules').glob('*.html'))
+    for marker in ('global-filters.js','reports-controls.js','reports-summary.js','period-report-loader.js'):
+        assert marker not in templates

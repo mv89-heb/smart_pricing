@@ -3,7 +3,7 @@ import os
 import secrets
 from datetime import timedelta
 
-from flask import Flask, jsonify, redirect, request, session, url_for
+from flask import Flask, jsonify, request, session, url_for, redirect
 
 from .db_setup import bootstrap_database
 from .extensions import db
@@ -11,7 +11,6 @@ from .extensions import db
 
 class _HealthMiddleware:
     """Answer GET /health before auth/routing for hosting probes."""
-
     def __init__(self, wsgi_app):
         self.wsgi_app = wsgi_app
 
@@ -26,34 +25,26 @@ class _HealthMiddleware:
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _asset(path, version):
-    return f'<script src="/static/{path}?v={version}" defer></script>'
-
-
-def _module_scripts(path):
-    """Load only the feature assets owned by the active workspace."""
-    common = [_asset("module-shell.js", 2), _asset("table-filters.js", 1)]
-    if path == "/":
-        return common + [_asset("period-report-loader.js", 4), _asset("browser-price-sync.js", 6), _asset("mobile-product-picker.js", 2), _asset("ui-stability.js", 3), _asset("app-shell-stability.js", 3), _asset("report-sort.js", 1)]
-    if path == "/periodic-report":
-        return common + [_asset("reports-module.js", 2)]
-    if path == "/settings":
-        return [_asset("module-shell.js", 2), _asset("password-reset.js", 4)]
-    if path == "/static/dashboard.html":
-        return common
-    return common
-
-
 def create_app():
-    app = Flask(__name__, static_folder=os.path.join(_PROJECT_ROOT, "static"), template_folder=os.path.join(_PROJECT_ROOT, "templates"))
-
+    app = Flask(
+        __name__,
+        static_folder=os.path.join(_PROJECT_ROOT, "static"),
+        template_folder=os.path.join(_PROJECT_ROOT, "templates"),
+    )
     secret_key = os.environ.get("SECRET_KEY")
     if not secret_key:
         if os.environ.get("FLASK_ENV", "development") == "production":
             raise RuntimeError("SECRET_KEY must be configured in production")
         secret_key = secrets.token_hex(32)
-
-    app.config.update(SECRET_KEY=secret_key, SQLALCHEMY_DATABASE_URI=os.environ.get("DATABASE_URL", "sqlite:///local_products.db").replace("postgres://", "postgresql://", 1), SQLALCHEMY_TRACK_MODIFICATIONS=False, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").lower() == "true", PERMANENT_SESSION_LIFETIME=timedelta(hours=8))
+    app.config.update(
+        SECRET_KEY=secret_key,
+        SQLALCHEMY_DATABASE_URI=os.environ.get("DATABASE_URL", "sqlite:///local_products.db").replace("postgres://", "postgresql://", 1),
+        SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+    )
     db.init_app(app)
 
     from .routes import admin, browser_price_sync, dashboard, entries, pages, periods, products, reports, system, templates_api, users
@@ -82,35 +73,8 @@ def create_app():
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         if request.is_secure:
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-        return response
-
-    @app.after_request
-    def inject_frontend_assets(response):
-        """Inject shared shell CSS and only the assets owned by this module."""
-        if "text/html" not in response.headers.get("Content-Type", ""):
-            return response
-        try:
-            if response.direct_passthrough:
-                response.direct_passthrough = False
-            body = response.get_data(as_text=True)
-            css_assets = [
-                '<link rel="stylesheet" href="/static/responsive-layout.css?v=1">',
-                '<link rel="stylesheet" href="/static/module-shell.css?v=2">',
-                '<link rel="stylesheet" href="/static/module-shell-polish.css?v=1">',
-                '<link rel="stylesheet" href="/static/module-isolation.css?v=1">',
-            ]
-            if request.path == "/periodic-report":
-                css_assets.append('<link rel="stylesheet" href="/static/reports-module.css?v=3">')
-            for asset in css_assets:
-                if asset not in body and "</head>" in body:
-                    body = body.replace("</head>", asset + "</head>", 1)
-            for script in _module_scripts(request.path):
-                if script not in body and "</body>" in body:
-                    body = body.replace("</body>", script + "</body>", 1)
-            response.set_data(body)
-            response.headers["Cache-Control"] = "no-store, max-age=0"
-        except Exception:
-            pass
+        if response.content_type.startswith("text/html"):
+            response.headers.setdefault("Cache-Control", "no-store, max-age=0")
         return response
 
     app.wsgi_app = _HealthMiddleware(app.wsgi_app)
