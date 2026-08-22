@@ -97,6 +97,7 @@ def create_app():
                 '<link rel="stylesheet" href="/static/responsive-layout.css?v=1">',
                 '<link rel="stylesheet" href="/static/module-shell.css?v=2">',
                 '<link rel="stylesheet" href="/static/module-shell-polish.css?v=1">',
+                '<link rel="stylesheet" href="/static/module-isolation.css?v=1">',
             ]
             if request.path == "/periodic-report":
                 css_assets.append('<link rel="stylesheet" href="/static/reports-module.css?v=3">')
