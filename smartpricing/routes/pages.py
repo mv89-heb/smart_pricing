@@ -8,21 +8,47 @@ from ..security import log_activity, login_rate_limited
 bp = Blueprint("pages", __name__)
 
 
-def _inject_page_assets(html):
-    """Attach page-level assets without mixing module markup into templates."""
+def _inject_page_assets(html, module="daily"):
+    """Attach page-level assets and an immediate server-side module boundary."""
     if "</head>" not in html:
         return html
+
+    module = "pricing" if module == "pricing" else "daily"
+    if module == "daily":
+        boundary = """
+<style id="server-module-boundary">
+body[data-server-module="daily"] #right-panel,
+body[data-server-module="daily"] #dashboard-modal,
+body[data-server-module="daily"] #period-display-panel,
+body[data-server-module="daily"] a[href="/static/dashboard.html"],
+body[data-server-module="daily"] a[href="/periodic-report"] { display:none !important; }
+body[data-server-module="daily"] #left-panel { width:100% !important; grid-column:1 / -1 !important; }
+</style>"""
+    else:
+        boundary = """
+<style id="server-module-boundary">
+body[data-server-module="pricing"] #left-panel,
+body[data-server-module="pricing"] #dashboard-modal,
+body[data-server-module="pricing"] #period-display-panel,
+body[data-server-module="pricing"] a[href="/static/dashboard.html"],
+body[data-server-module="pricing"] a[href="/periodic-report"] { display:none !important; }
+body[data-server-module="pricing"] #right-panel { width:100% !important; grid-column:1 / -1 !important; }
+</style>"""
+
+    html = html.replace("<body", f'<body data-server-module="{module}"', 1)
     assets = (
-        '<link rel="stylesheet" href="/static/daily-module-focus.css?v=1">'
-        '<script src="/static/daily-module-focus.js?v=1" defer></script>'
+        boundary
+        + '<link rel="stylesheet" href="/static/daily-module-focus.css?v=2">'
+        + '<script src="/static/daily-module-focus.js?v=2" defer></script>'
     )
     return html.replace("</head>", assets + "</head>", 1)
 
 
 @bp.route("/")
 def index():
+    module = "pricing" if request.args.get("module") == "pricing" else "daily"
     html = render_template("index.html")
-    html = _inject_page_assets(html)
+    html = _inject_page_assets(html, module)
     if "</body>" in html:
         html = html.replace(
             "</body>",
