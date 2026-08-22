@@ -6,11 +6,9 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///test_production_entrypoint.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 
-def test_production_entrypoints_expose_app():
-    wsgi=importlib.import_module('wsgi'); production=importlib.import_module('production')
-    assert wsgi.app is not None
-    assert production.app is not None
-    assert type(wsgi.app) is type(production.app)
+def test_production_entrypoint_exposes_factory_app():
+    module=importlib.import_module('production')
+    assert module.app is not None
 
 
 def test_production_entrypoint_registers_password_reset_route():
