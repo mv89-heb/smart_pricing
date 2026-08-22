@@ -11,6 +11,8 @@
 
   let select = null;
   let syncing = false;
+  let domObserver = null;
+  let resizeInstalled = false;
 
   function getOptions() {
     return select
@@ -163,22 +165,32 @@
     const found = document.getElementById(SELECT_ID);
     if (!found) return false;
 
-    select = found;
+    if (select !== found) {
+      select = found;
+      select.addEventListener('change', syncButton);
+    }
     if (isMobile()) syncButton();
     return true;
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+  function watchUntilReady() {
+    if (init()) {
+      domObserver?.disconnect();
+      domObserver = null;
+      return;
+    }
+    if (!domObserver) {
+      domObserver = new MutationObserver(() => {
+        if (init()) {
+          domObserver.disconnect();
+          domObserver = null;
+        }
+      });
+      domObserver.observe(document.body, { childList: true, subtree: true });
+    }
   }
 
-  new MutationObserver(() => {
-    if (init() && isMobile()) syncButton();
-  }).observe(document.body, { childList: true, subtree: true });
-
-  window.addEventListener('resize', () => {
+  function handleResize() {
     if (!isMobile()) {
       close();
       const button = document.getElementById(BUTTON_ID);
@@ -192,5 +204,16 @@
     } else {
       syncButton();
     }
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', watchUntilReady, { once: true });
+  } else {
+    watchUntilReady();
+  }
+
+  if (!resizeInstalled) {
+    resizeInstalled = true;
+    window.addEventListener('resize', handleResize, { passive: true });
+  }
 })();
