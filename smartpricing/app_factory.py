@@ -40,6 +40,7 @@ def create_app():
         SECRET_KEY=secret_key,
         SQLALCHEMY_DATABASE_URI=os.environ.get("DATABASE_URL", "sqlite:///local_products.db").replace("postgres://", "postgresql://", 1),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        SQLALCHEMY_ENGINE_OPTIONS={"pool_pre_ping": True, "pool_recycle": 1800},
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
@@ -60,9 +61,6 @@ def create_app():
         if not request.path.startswith("/api/") and not session.get("logged_in"):
             return redirect(url_for("pages.login"))
 
-        # The session identifies the browser, but the DB is the source of
-        # truth. Deleted users are logged out immediately and role changes are
-        # reflected on every request instead of waiting for session expiry.
         if session.get("logged_in") and session.get("username"):
             from .models import User
             user = User.query.filter_by(username=session.get("username")).first()
@@ -87,7 +85,9 @@ def create_app():
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         if request.is_secure:
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-        if response.content_type.startswith("text/html"):
+        if request.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "public, max-age=3600")
+        elif response.content_type.startswith("text/html"):
             response.headers.setdefault("Cache-Control", "no-store, max-age=0")
         return response
 
