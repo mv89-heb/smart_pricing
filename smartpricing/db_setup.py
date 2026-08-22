@@ -1,93 +1,101 @@
-"""One consolidated, idempotent database bootstrap routine.
-
-Previously this logic was split across app.py (_run_migrations, run at import
-time) and wsgi.py (_install_indexes, run again at import time only if wsgi.py
-happened to get imported - which silently didn't happen unless every module
-in the wsgi_ui -> wsgi chain imported cleanly). Splitting it in two places
-meant the two routines could drift and it was unclear which one actually ran
-in production. There is now exactly one bootstrap function, called exactly
-once from create_app().
-
-Nothing here drops or resets data - every step is additive/idempotent
-(ADD COLUMN IF NOT EXISTS-equivalent, CREATE INDEX IF NOT EXISTS, backfill
-of NULL/zero values only).
+"""Database bootstrap and one-way migration from the legacy Smart Pricing schema.
+Never deletes the application database. Legacy tables are renamed with a legacy_v1_ prefix,
+then data is copied into the clean tenant-aware schema.
 """
-import secrets
-
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from werkzeug.security import generate_password_hash
 
 from .extensions import db
-from .models import User
-
-_COLUMN_MIGRATIONS = (
-    ("daily_entry", "total_amount", "ALTER TABLE daily_entry ADD COLUMN total_amount NUMERIC(14,2)"),
-    ("product", "tag", "ALTER TABLE product ADD COLUMN tag VARCHAR(80)"),
-    ("price_history", "effective_from", "ALTER TABLE price_history ADD COLUMN effective_from VARCHAR(10)"),
-)
-
-_INDEX_STATEMENTS = (
-    "CREATE INDEX IF NOT EXISTS ix_daily_entry_date_id ON daily_entry (date, id)",
-    "CREATE INDEX IF NOT EXISTS ix_daily_entry_date_product_extra ON daily_entry (date, product_name, is_extra)",
-    "CREATE INDEX IF NOT EXISTS ix_price_history_product_effective_id ON price_history (product_id, effective_from, id)",
-    "CREATE INDEX IF NOT EXISTS ix_period_lock_month_locked ON period_lock (year_month, locked)",
-    "CREATE INDEX IF NOT EXISTS ix_activity_log_timestamp ON activity_log (timestamp)",
-    "CREATE INDEX IF NOT EXISTS ix_template_item_product_name ON billing_template_item (product_name)",
-)
-
-_POSTGRES_TYPE_FIXES = (
-    "ALTER TABLE daily_entry ALTER COLUMN unit_price TYPE NUMERIC(12,2) USING ROUND(unit_price::numeric, 2)",
-    "ALTER TABLE product ALTER COLUMN price TYPE NUMERIC(12,2) USING ROUND(price::numeric, 2)",
-)
+from .models import Tenant, User
 
 
-def _column_exists(table_name, column_name):
-    try:
-        return column_name in [c["name"] for c in db.inspect(db.engine).get_columns(table_name)]
-    except Exception:
-        return True
+def _table_exists(name):
+    return inspect(db.engine).has_table(name)
 
 
-def _run(sql):
-    try:
-        db.session.execute(text(sql))
-        db.session.commit()
-        return True
-    except Exception:
-        db.session.rollback()
+def _columns(name):
+    return {c["name"] for c in inspect(db.engine).get_columns(name)} if _table_exists(name) else set()
+
+
+def _rename_if_legacy(name, required_columns):
+    if not _table_exists(name):
         return False
+    cols = _columns(name)
+    if required_columns.issubset(cols):
+        return False
+    legacy = f"legacy_v1_{name}"
+    if not _table_exists(legacy):
+        db.session.execute(text(f'ALTER TABLE "{name}" RENAME TO "{legacy}"'))
+        return True
+    return False
 
 
-def bootstrap_database(app):
-    """Create tables, apply safe migrations/indexes, seed the first admin user.
+def bootstrap():
+    # Detect and isolate incompatible pre-v2 tables before create_all().
+    _rename_if_legacy("users", {"tenant_id", "email", "password_hash"})
+    _rename_if_legacy("daily_entries", {"tenant_id", "product_id", "price_at_time", "entry_type"})
+    _rename_if_legacy("price_history", {"product_id", "effective_date", "changed_by"})
+    _rename_if_legacy("period_locks", {"tenant_id", "year_month"})
+    _rename_if_legacy("activity_logs", {"tenant_id", "action", "details"})
+    _rename_if_legacy("billing_templates", {"tenant_id", "name"})
+    _rename_if_legacy("billing_template_items", {"template_id", "product_id"})
 
-    Safe to call on every app start - every statement is a no-op if already applied.
-    """
-    with app.app_context():
-        db.create_all()
+    db.create_all()
+    _migrate_legacy_data()
+    _ensure_default_tenant_and_admin()
+    db.session.commit()
 
-        for table, column, sql in _COLUMN_MIGRATIONS:
-            if not _column_exists(table, column):
-                _run(sql)
 
-        _run(
-            "UPDATE daily_entry SET total_amount = ROUND(COALESCE(quantity,0) * COALESCE(unit_price,0), 2) "
-            "WHERE total_amount IS NULL OR total_amount = 0"
-        )
-        _run(
-            "UPDATE price_history SET effective_from = SUBSTR(CAST(changed_at AS TEXT),1,10) "
-            "WHERE effective_from IS NULL"
-        )
+def _migrate_legacy_data():
+    if not _table_exists("legacy_v1_product") and not _table_exists("legacy_v1_daily_entries"):
+        return
 
-        if db.engine.name == "postgresql":
-            for sql in _POSTGRES_TYPE_FIXES:
-                _run(sql)
+    tenant = Tenant.query.order_by(Tenant.id).first()
+    if not tenant:
+        tenant = Tenant(name="Smart Pricing")
+        db.session.add(tenant)
+        db.session.flush()
 
-        for sql in _INDEX_STATEMENTS:
-            _run(sql)
+    product_map = {}
+    if _table_exists("legacy_v1_product"):
+        rows = db.session.execute(text('SELECT id, name, price, tag FROM legacy_v1_product ORDER BY id')).mappings()
+        for row in rows:
+            existing = db.session.execute(text('SELECT id FROM products WHERE tenant_id=:t AND name=:n'), {"t": tenant.id, "n": row["name"]}).scalar()
+            if existing:
+                product_map[row["id"]] = existing
+                continue
+            result = db.session.execute(text('INSERT INTO products (tenant_id, sku, name, category, unit, current_price, is_active) VALUES (:t,:sku,:n,:c,:u,:p,:a)'), {"t": tenant.id, "sku": f"LEG-{row['id']}", "n": row["name"], "c": row["tag"] or "כללי", "u": "יחידות", "p": row["price"] or 0, "a": True})
+            new_id = db.session.execute(text('SELECT id FROM products WHERE tenant_id=:t AND name=:n'), {"t": tenant.id, "n": row["name"]}).scalar()
+            product_map[row["id"]] = new_id
 
-        if User.query.count() == 0:
-            temp_pass = secrets.token_urlsafe(8)
-            db.session.add(User(username="admin", password=generate_password_hash(temp_pass), role="admin"))
-            db.session.commit()
-            app.logger.warning("SECURITY NOTICE: initial admin password generated for admin: %s", temp_pass)
+    admin_id = User.query.filter_by(tenant_id=tenant.id).order_by(User.id).with_entities(User.id).first()
+    admin_id = admin_id[0] if admin_id else None
+
+    if _table_exists("legacy_v1_price_history"):
+        for row in db.session.execute(text('SELECT ph.product_id, ph.price, ph.effective_from, ph.changed_at, ph.changed_by FROM legacy_v1_price_history ph')).mappings():
+            pid = product_map.get(row["product_id"])
+            if not pid:
+                continue
+            eff = row["effective_from"] or "2026-01-01"
+            exists = db.session.execute(text('SELECT id FROM price_history WHERE product_id=:p AND effective_date=:d'), {"p": pid, "d": eff}).scalar()
+            if not exists:
+                db.session.execute(text('INSERT INTO price_history (product_id, price, effective_date, changed_at, changed_by) VALUES (:p,:price,:d,:at,:by)'), {"p": pid, "price": row["price"], "d": eff, "at": row["changed_at"], "by": row["changed_by"] or "מערכת"})
+
+    if _table_exists("legacy_v1_daily_entries"):
+        rows = db.session.execute(text('SELECT date, product_name, quantity, is_extra, unit_price, total_amount, note FROM legacy_v1_daily_entries')).mappings()
+        for row in rows:
+            pid = db.session.execute(text('SELECT id FROM products WHERE tenant_id=:t AND name=:n'), {"t": tenant.id, "n": row["product_name"]}).scalar()
+            if not pid:
+                continue
+            price = row["unit_price"] if row["unit_price"] is not None else db.session.execute(text('SELECT current_price FROM products WHERE id=:p'), {"p": pid}).scalar()
+            db.session.execute(text('INSERT INTO daily_entries (tenant_id, date, product_id, quantity, price_at_time, entry_type, notes, recorded_by) VALUES (:t,:d,:p,:q,:price,:type,:note,:u)'), {"t": tenant.id, "d": row["date"], "p": pid, "q": row["quantity"], "price": price or 0, "type": "extra" if row["is_extra"] else "regular", "note": row["note"], "u": admin_id})
+
+
+def _ensure_default_tenant_and_admin():
+    tenant = Tenant.query.order_by(Tenant.id).first()
+    if not tenant:
+        tenant = Tenant(name="Smart Pricing")
+        db.session.add(tenant)
+        db.session.flush()
+    if not User.query.filter_by(tenant_id=tenant.id).first():
+        db.session.add(User(tenant_id=tenant.id, email="admin@smartpricing.local", name="מנהל מערכת", password_hash=generate_password_hash("admin123"), role="admin", is_active=True))
