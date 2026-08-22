@@ -86,7 +86,7 @@ def create_app():
         if request.is_secure:
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         if request.path.startswith("/static/"):
-            response.headers.setdefault("Cache-Control", "public, max-age=3600")
+            response.headers["Cache-Control"] = "public, max-age=3600"
         elif response.content_type.startswith("text/html"):
             response.headers.setdefault("Cache-Control", "no-store, max-age=0")
         return response
