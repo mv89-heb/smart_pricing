@@ -1,9 +1,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const ready = fn => document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', fn) : fn();
-
-  function installCss() {
+  const installCss = () => {
     if ($('app-shell-stability-css')) return;
     const s = document.createElement('style');
     s.id = 'app-shell-stability-css';
@@ -17,8 +15,7 @@
       }
     `;
     document.head.appendChild(s);
-  }
-
+  };
   const setVisible = (el, visible) => {
     if (!el) return;
     el.classList.toggle('app-screen-hidden', !visible);
@@ -31,84 +28,38 @@
     const grid = document.querySelector('main > .grid');
     const daily = $('left-panel');
     const pricing = $('right-panel');
-
     if (!grid || !daily || !pricing) return false;
 
     if (view === 'dashboard') {
-      setVisible(dashboard, true);
-      setVisible(grid, false);
-      setVisible(daily, false);
-      setVisible(pricing, false);
+      setVisible(dashboard, true); setVisible(grid, false); setVisible(daily, false); setVisible(pricing, false);
     } else if (view === 'daily') {
-      setVisible(dashboard, false);
-      setVisible(grid, true);
-      setVisible(daily, true);
-      setVisible(pricing, false);
+      setVisible(dashboard, false); setVisible(grid, true); setVisible(daily, true); setVisible(pricing, false);
     } else if (view === 'pricing') {
-      setVisible(dashboard, false);
-      setVisible(grid, true);
-      setVisible(daily, false);
-      setVisible(pricing, true);
-    } else {
-      return false;
-    }
+      setVisible(dashboard, false); setVisible(grid, true); setVisible(daily, false); setVisible(pricing, true);
+    } else return false;
 
-    document.querySelectorAll('#ux-shell-nav [data-v]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.v === view);
-    });
-
-    if (view === 'daily' && typeof window.loadEntriesForDate === 'function') {
-      window.loadEntriesForDate();
-    }
-    if (view === 'pricing' && typeof window.loadProducts === 'function') {
-      window.loadProducts();
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.querySelectorAll('#ux-shell-nav [data-v]').forEach(btn => btn.classList.toggle('active', btn.dataset.v === view));
+    if (view === 'daily' && typeof window.loadEntriesForDate === 'function') window.loadEntriesForDate();
+    if (view === 'pricing' && typeof window.loadProducts === 'function') window.loadProducts();
+    window.scrollTo({top: 0, behavior: 'smooth'});
     return true;
   }
 
   function bindNavigation() {
     const nav = $('ux-shell-nav');
     if (!nav) return false;
-
-    // Always expose the canonical navigation function. This fixes the race
-    // between ux-enhancements.js and this stability layer.
     window.switchView = workspace;
     window.openDashboard = () => workspace('dashboard');
-
     if (nav.dataset.stabilityBound === '1') return true;
     nav.dataset.stabilityBound = '1';
-
     nav.addEventListener('click', event => {
       const btn = event.target.closest('[data-v]');
       if (!btn || !nav.contains(btn)) return;
       const view = btn.dataset.v;
       if (!['dashboard', 'daily', 'pricing'].includes(view)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      workspace(view);
+      event.preventDefault(); event.stopPropagation(); workspace(view);
     });
     return true;
-  }
-
-  function fixProductFormReset() {
-    const form = $('product-form');
-    if (!form || form.dataset.resetFixed === '1') return;
-    form.dataset.resetFixed = '1';
-    const original = window.cancelProductEdit;
-    window.cancelProductEdit = function () {
-      try { if (typeof original === 'function') original(); } catch (_) {}
-      const tag = $('prod-tag');
-      if (tag) tag.value = '';
-      const originalName = $('prod-edit-original-name');
-      if (originalName) originalName.value = '';
-      const title = $('product-form-title');
-      if (title) title.textContent = 'הוספת מוצר חדש';
-      const cancel = $('product-cancel-edit-btn');
-      if (cancel) cancel.classList.add('hidden');
-      const text = $('product-submit-btn-text');
-      if (text) text.textContent = 'שמור למחירון';
-    };
   }
 
   function fixBulkUpdate() {
@@ -132,7 +83,7 @@
         const r = await fetch(`/api/products/${encodeURIComponent(name)}`, {
           method: 'PUT', credentials: 'same-origin',
           headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
-          body: JSON.stringify({ name, price, effective_from: effective })
+          body: JSON.stringify({name, price, effective_from: effective})
         });
         if (r.ok) ok++;
       }
@@ -147,20 +98,16 @@
   function init() {
     installCss();
     bindNavigation();
-    fixProductFormReset();
     fixBulkUpdate();
-
-    // ux-enhancements creates the nav/dashboard asynchronously on DOM ready.
     let attempts = 0;
     const retry = () => {
       attempts += 1;
       bindNavigation();
-      fixProductFormReset();
       fixBulkUpdate();
       if (attempts < 20 && !$('ux-shell-nav')) setTimeout(retry, 100);
     };
     retry();
   }
 
-  ready(init);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
