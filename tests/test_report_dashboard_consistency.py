@@ -27,5 +27,11 @@ def test_dashboard_and_period_report_share_canonical_engine():
         db.session.add(DailyEntry(date='2026-08-20',product_name='מוצר בדיקה',quantity=2,unit_price=10,is_extra=False,total_amount=20));db.session.commit()
     client=app.test_client();_login(client)
     report=client.get('/api/report/period?from=2026-08-20&to=2026-08-20');dashboard=client.get('/api/dashboard/summary?from=2026-08-20&to=2026-08-20')
-    assert report.status_code==200 and dashboard.status_code==200 and report.get_json()==dashboard.get_json()
-    with app.app_context(): assert report.get_json()==build_period_report('2026-08-20','2026-08-20')
+    report_payload=report.get_json(); dashboard_payload=dashboard.get_json()
+    assert report.status_code==200 and dashboard.status_code==200
+    assert report_payload["summary"] == dashboard_payload["summary"]
+    assert report_payload["product_summary"] == dashboard_payload["product_summary"]
+    assert report_payload["day_summary"] == dashboard_payload["day_summary"]
+    assert dashboard_payload["entries"] == []
+    with app.app_context():
+        assert report_payload==build_period_report('2026-08-20','2026-08-20')
