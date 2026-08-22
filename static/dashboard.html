@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dashboard | ניהול חיובים</title>
+<title>Dashboard | Smart Pricing</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -11,10 +11,10 @@
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen">
 <div class="w-full p-4 sm:p-6">
-<header class="flex flex-col sm:flex-row justify-between gap-4 items-start sm:items-center mb-6">
-<div><p class="text-indigo-600 font-bold text-sm">מרכז שליטה</p><h1 class="text-3xl font-extrabold">Dashboard חיובים</h1><p id="subtitle" class="text-slate-500 text-sm mt-1"></p></div>
-<div class="flex gap-2 flex-wrap"><a href="/" class="px-4 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-bold">יומי</a><a href="/static/dashboard.html" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold">דאשבורד</a><a href="/periodic-report" class="px-4 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-bold">דוח תקופתי</a><button onclick="toggleDark()" class="px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800" title="מצב לילה">◐</button><button onclick="toggleFullscreen()" class="px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800" title="מסך מלא">⛶</button></div>
-</header>
+<div class="flex flex-col sm:flex-row justify-between gap-3 items-start sm:items-center mb-5">
+<div><p class="text-indigo-600 dark:text-indigo-400 font-bold text-sm">תמונת מצב</p><p id="subtitle" class="text-slate-500 dark:text-slate-400 text-sm mt-1"></p></div>
+<div class="text-xs text-slate-500 dark:text-slate-400">הנתונים מבוססים על מנוע הדוחות המרכזי</div>
+</div>
 <section class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
 <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4"><p class="text-xs text-slate-500 font-bold">החודש</p><p id="monthTotal" class="num text-2xl font-extrabold mt-1">₪0.00</p><p id="monthDelta" class="text-xs mt-1"></p></div>
 <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4"><p class="text-xs text-slate-500 font-bold">היום</p><p id="todayTotal" class="num text-2xl font-extrabold mt-1">₪0.00</p></div>
@@ -48,8 +48,6 @@ async function compare(){const a=await report($('aFrom').value,$('aTo').value),b
 async function refreshLock(){const m=$('lockMonth').value;if(!m)return;const r=await api('/api/period-locks/'+m);if(r&&r.ok){const x=await r.json();$('lockStatus').textContent=x.locked?'🔒 נעול':'🟢 פתוח';$('lockStatus').className='text-xs font-bold '+(x.locked?'text-rose-600':'text-emerald-600');$('lockMsg').textContent=x.locked?'החודש נעול לשינויים.':'החודש פתוח לעריכה.'}}
 async function lockPeriod(){const m=$('lockMonth').value;if(!m)return;const r=await api('/api/period-locks/'+m,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'}});if(r&&r.ok)await refreshLock();else alert('נדרש מנהל או שהפעולה נכשלה')}
 async function unlockPeriod(){const m=$('lockMonth').value;if(!m)return;const r=await api('/api/period-locks/'+m,{method:'DELETE',headers:{'X-Requested-With':'XMLHttpRequest'}});if(r&&r.ok)await refreshLock();else alert('נדרש מנהל או שהפעולה נכשלה')}
-function toggleDark(){document.documentElement.classList.toggle('dark');localStorage.setItem('theme',document.documentElement.classList.contains('dark')?'dark':'light')}
-function toggleFullscreen(){if(!document.fullscreenElement){document.documentElement.requestFullscreen?.().catch(()=>{})}else{document.exitFullscreen?.()}}
-if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark');init();
+init();
 </script>
 </body></html>
