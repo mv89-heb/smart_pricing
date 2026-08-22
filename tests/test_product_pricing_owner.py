@@ -39,3 +39,18 @@ def test_product_route_module_has_one_price_history_writer():
     source = open("smartpricing/routes/products.py", encoding="utf-8").read()
     assert source.count("PriceHistory(") == 1
     assert source.count("PriceHistory.query.filter_by(product_id=product.id, effective_from=effective)") == 1
+
+
+def test_sqlite_product_delete_cascades_price_history():
+    with app.app_context():
+        product = Product(name="בדיקת cascade", price=10, tag=None)
+        db.session.add(product)
+        db.session.flush()
+        _upsert_price_history(product, 10, "2026-08-22", "test")
+        db.session.commit()
+        product_id = product.id
+
+        db.session.delete(product)
+        db.session.commit()
+
+        assert PriceHistory.query.filter_by(product_id=product_id).count() == 0
