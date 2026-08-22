@@ -1,0 +1,53 @@
+/* Daily module focus
+ * Keeps the legacy daily workspace functional while removing unrelated
+ * dashboards/reports/pricing surfaces from the daily page.
+ */
+
+body[data-ui-module="daily"] #right-panel,
+body[data-ui-module="daily"] #dashboard-modal,
+body[data-ui-module="daily"] header a[href="/static/dashboard.html"],
+body[data-ui-module="daily"] header a[href="/periodic-report"] {
+    display: none !important;
+}
+
+body[data-ui-module="daily"] #left-panel {
+    width: 100%;
+    grid-column: 1 / -1;
+}
+
+body[data-ui-module="daily"] main > .grid {
+    display: block;
+}
+
+body[data-ui-module="daily"] #left-panel > .bg-white:first-child {
+    border-top-width: 0;
+}
+
+/* Pricing remains available through the dedicated pricing module URL. */
+body[data-ui-module="pricing"] #left-panel,
+body[data-ui-module="pricing"] #dashboard-modal,
+body[data-ui-module="pricing"] header a[href="/static/dashboard.html"],
+body[data-ui-module="pricing"] header a[href="/periodic-report"] {
+    display: none !important;
+}
+
+body[data-ui-module="pricing"] #right-panel {
+    display: flex !important;
+    width: 100%;
+    grid-column: 1 / -1;
+}
+
+body[data-ui-module="pricing"] main > .grid {
+    display: block;
+}
+
+/* The dashboard and periodic report have their own owners/routes. */
+body[data-ui-module="daily"] #admin-panel-btn {
+    /* Admin remains available only through Settings ownership when exposed. */
+}
+
+@media (max-width: 1023px) {
+    body[data-ui-module="daily"] #left-panel {
+        grid-column: 1 / -1;
+    }
+}
