@@ -48,15 +48,16 @@
 
     document.addEventListener('click', event => {
       const button = event.target.closest('button[type="submit"], button[data-loading], .js-loading-button');
-      if (!button || button.disabled) return;
-      if (button.dataset.noLoading === '1') return;
+      if (!button || button.disabled || button.dataset.noLoading === '1') return;
       button.classList.add('ui-action-busy');
       button.setAttribute('aria-busy', 'true');
       const original = button.innerHTML;
       button.dataset.originalHtml = original;
       const icon = button.querySelector('i');
       if (icon) icon.className = 'fa-solid fa-spinner fa-spin';
-      else if (!button.querySelector('.ui-spinner')) button.insertAdjacentHTML('afterbegin', '<i class="fa-solid fa-spinner fa-spin ui-spinner"></i> ');
+      else if (!button.querySelector('.ui-spinner')) {
+        button.insertAdjacentHTML('afterbegin', '<i class="fa-solid fa-spinner fa-spin ui-spinner"></i> ');
+      }
       window.setTimeout(() => {
         if (!button.isConnected) return;
         button.classList.remove('ui-action-busy');
@@ -66,24 +67,18 @@
     }, true);
   }
 
-  function installViewSafety() {
-    if (window.__uiStabilityViewSafety) return;
-    window.__uiStabilityViewSafety = true;
-    window.addEventListener('hashchange', () => {
-      if (location.hash === '#daily' && typeof window.switchView === 'function') window.switchView('daily');
-      if (location.hash === '#pricing' && typeof window.switchView === 'function') window.switchView('pricing');
-      if (location.hash === '#dashboard' && typeof window.switchView === 'function') window.switchView('dashboard');
-    });
-  }
-
   function init() {
     installProductFormReset();
     installDailySubmitGuard();
     installActionFeedback();
-    installViewSafety();
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
-  new MutationObserver(init).observe(document.body, { childList: true, subtree: true });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, {once: true});
+  } else {
+    init();
+  }
+
+  // Forms are created dynamically by the legacy daily/pricing UI.
+  new MutationObserver(init).observe(document.body, {childList: true, subtree: true});
 })();
