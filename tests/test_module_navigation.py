@@ -13,9 +13,13 @@ def test_settings_route_is_registered():
 
 
 def test_module_shell_assets_are_injected_into_settings_page():
-    with app.test_request_context("/settings"):
-        response = app.full_dispatch_request()
-        body = response.get_data(as_text=True)
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session["logged_in"] = True
+        session["username"] = "test"
+        session["role"] = "admin"
+    response = client.get("/settings")
+    body = response.get_data(as_text=True)
     assert response.status_code == 200
     assert "/static/module-shell.css?v=1" in body
     assert "/static/module-shell.js?v=1" in body
