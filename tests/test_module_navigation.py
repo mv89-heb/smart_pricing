@@ -26,6 +26,7 @@ def test_module_shell_assets_are_injected_into_settings_page():
     body = response.get_data(as_text=True)
     assert response.status_code == 200
     assert "/static/module-shell.css?v=1" in body
+    assert "/static/module-shell-polish.css?v=1" in body
     assert "/static/module-shell.js?v=1" in body
 
 
@@ -61,4 +62,5 @@ def test_dashboard_and_report_keep_their_module_shell_assets():
         body = response.get_data(as_text=True)
         assert response.status_code == 200
         assert "/static/module-shell.css?v=1" in body
+        assert "/static/module-shell-polish.css?v=1" in body
         assert "/static/module-shell.js?v=1" in body
