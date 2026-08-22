@@ -7,7 +7,9 @@ os.environ["DATABASE_URL"] = f"sqlite:///{DB_FILE.name}"
 os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["FLASK_ENV"] = "development"
 
-from app import app, db, DailyEntry
+from wsgi import app
+from smartpricing.extensions import db
+from smartpricing.models import DailyEntry
 from smartpricing.services.reports import build_period_report
 
 
@@ -15,6 +17,13 @@ def setup_function(_):
     with app.app_context():
         db.drop_all()
         db.create_all()
+
+
+def _login(client):
+    with client.session_transaction() as session:
+        session["logged_in"] = True
+        session["username"] = "test"
+        session["role"] = "admin"
 
 
 def test_dashboard_and_period_report_share_canonical_engine():
@@ -30,6 +39,7 @@ def test_dashboard_and_period_report_share_canonical_engine():
         db.session.commit()
 
     client = app.test_client()
+    _login(client)
     report = client.get("/api/report/period?from=2026-08-20&to=2026-08-20")
     dashboard = client.get("/api/dashboard/summary?from=2026-08-20&to=2026-08-20")
 
