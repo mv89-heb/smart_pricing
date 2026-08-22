@@ -1,66 +1,30 @@
-from flask import Blueprint, jsonify, session
+from datetime import datetime, timezone
+from flask import Blueprint, request, jsonify, g
+from sqlalchemy import select
+from ..extensions import db
+from ..models import PeriodLock
+from ..security import require_role, audit
 
-from ..security import write_access
-from ..services.periods import get_lock_status, set_lock
-from ..utils import valid_month
+periods_bp = Blueprint("periods", __name__, url_prefix="/api/periods")
 
-bp = Blueprint("periods", __name__)
+@periods_bp.get("")
+def list_periods():
+    rows = db.session.scalars(select(PeriodLock).where(PeriodLock.tenant_id == g.current_user.tenant_id).order_by(PeriodLock.year_month.desc())).all()
+    return jsonify([{ "year_month": r.year_month, "locked": r.locked } for r in rows])
 
-
-@bp.post("/api/periods/<string:year_month>/lock")
+@periods_bp.post("/<year_month>/lock")
+@require_role("admin")
 def lock_period(year_month):
-    denied = write_access()
-    if denied:
-        return denied
-    if not valid_month(year_month):
-        return jsonify({"success": False, "error": "חודש לא תקין"}), 400
-    set_lock(year_month, True, session.get("username", "מערכת"))
-    return jsonify({"success": True, "year_month": year_month, "locked": True})
+    try: datetime.strptime(year_month, "%Y-%m")
+    except ValueError: return jsonify(status="error", message="תקופה לא תקינה"), 400
+    row = db.session.scalar(select(PeriodLock).where(PeriodLock.tenant_id == g.current_user.tenant_id, PeriodLock.year_month == year_month))
+    if not row: row = PeriodLock(tenant_id=g.current_user.tenant_id, year_month=year_month); db.session.add(row)
+    row.locked = True; row.locked_at = datetime.now(timezone.utc).replace(tzinfo=None); row.locked_by = g.current_user.name; audit("PERIOD_LOCK", year_month); db.session.commit()
+    return jsonify(status="success", message="התקופה ננעלה")
 
-
-@bp.post("/api/periods/<string:year_month>/unlock")
+@periods_bp.post("/<year_month>/unlock")
+@require_role("admin")
 def unlock_period(year_month):
-    denied = write_access()
-    if denied:
-        return denied
-    if not valid_month(year_month):
-        return jsonify({"success": False, "error": "חודש לא תקין"}), 400
-    set_lock(year_month, False, session.get("username", "מערכת"))
-    return jsonify({"success": True, "year_month": year_month, "locked": False})
-
-
-# --- Below: what the dashboard screen actually calls -----------------------
-# BUG FIX: static/dashboard.html's refreshLock()/lockPeriod()/unlockPeriod()
-# call GET/POST/DELETE on /api/period-locks/<year_month>. That route never
-# existed on the backend (only /api/periods/<ym>/lock and .../unlock, both
-# POST-only, did) so the dashboard's lock indicator and lock/unlock buttons
-# always failed with a 404. Both route families now share the same service
-# functions, so they can never disagree about a month's lock state.
-
-@bp.get("/api/period-locks/<string:year_month>")
-def get_period_lock(year_month):
-    if not valid_month(year_month):
-        return jsonify({"error": "חודש לא תקין"}), 400
-    return jsonify({"year_month": year_month, "locked": get_lock_status(year_month)})
-
-
-@bp.post("/api/period-locks/<string:year_month>")
-def create_period_lock(year_month):
-    denied = write_access()
-    if denied:
-        return denied
-    if not valid_month(year_month):
-        return jsonify({"success": False, "error": "חודש לא תקין"}), 400
-    set_lock(year_month, True, session.get("username", "מערכת"))
-    return jsonify({"success": True, "year_month": year_month, "locked": True})
-
-
-@bp.route("/api/period-locks/<string:year_month>", methods=["DELETE"])
-def delete_period_lock(year_month):
-    denied = write_access()
-    if denied:
-        return denied
-    if not valid_month(year_month):
-        return jsonify({"success": False, "error": "חודש לא תקין"}), 400
-    set_lock(year_month, False, session.get("username", "מערכת"))
-    return jsonify({"success": True, "year_month": year_month, "locked": False})
+    row = db.session.scalar(select(PeriodLock).where(PeriodLock.tenant_id == g.current_user.tenant_id, PeriodLock.year_month == year_month))
+    if row: row.locked = False; audit("PERIOD_UNLOCK", year_month); db.session.commit()
+    return jsonify(status="success", message="התקופה שוחררה")
