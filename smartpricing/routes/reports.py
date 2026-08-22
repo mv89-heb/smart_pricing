@@ -1,52 +1,20 @@
-from flask import Blueprint, jsonify, request
+from datetime import date
+from flask import Blueprint, request, jsonify, g
+from sqlalchemy import select
+from ..models import Product
+from ..services.reports import period_report
 
-from ..services.reports import build_full_history_report, build_period_report, compare_periods, valid_range
-
-bp = Blueprint("reports", __name__)
-
-
-@bp.get("/api/report/period")
-def get_period_report():
-    start = str(request.args.get("from") or "").strip()
-    end = str(request.args.get("to") or "").strip()
-    if not valid_range(start, end):
-        return jsonify({"error": "טווח תאריכים לא תקין"}), 400
-    return jsonify(build_period_report(start, end))
+reports_bp = Blueprint("reports", __name__, url_prefix="/api/reports")
 
 
-@bp.get("/api/report/compare")
-def compare_report():
-    a_from = str(request.args.get("a_from") or "").strip()
-    a_to = str(request.args.get("a_to") or "").strip()
-    b_from = str(request.args.get("b_from") or "").strip()
-    b_to = str(request.args.get("b_to") or "").strip()
-    if not (valid_range(a_from, a_to) and valid_range(b_from, b_to)):
-        return jsonify({"error": "טווח השוואה לא תקין"}), 400
-    return jsonify(compare_periods(a_from, a_to, b_from, b_to))
-
-
-@bp.get("/api/report/all")
-def report_all():
-    """Previously unreachable: the only implementation lived in wsgi_patched.py,
-    which imported a function (build_report) that did not exist anywhere in the
-    codebase, so that module could never be imported - and nothing loaded it
-    anyway. The main screen's injected period panel and the (unused) history
-    page both call this."""
-    return jsonify(build_full_history_report())
-
-
-@bp.get("/api/report/month/<string:year_month>")
-def report_month(year_month):
-    """Previously missing - templates/index.html's dashboard modal calls this
-    to get the raw entry list for a month, and had no backend route to hit."""
-    from ..models import DailyEntry
-    from ..utils import entry_json, valid_month
-
-    if not valid_month(year_month):
-        return jsonify({"error": "חודש לא תקין"}), 400
-    rows = (
-        DailyEntry.query.filter(DailyEntry.date.like(f"{year_month}-%"))
-        .order_by(DailyEntry.date.asc(), DailyEntry.id.asc())
-        .all()
-    )
-    return jsonify([entry_json(row) for row in rows])
+@reports_bp.get("")
+def report():
+    try:
+        start = date.fromisoformat(request.args["start"]); end = date.fromisoformat(request.args["end"])
+    except (KeyError, ValueError): return jsonify(status="error", message="טווח תאריכים לא תקין"), 400
+    if end < start: return jsonify(status="error", message="תאריך הסיום חייב להיות אחרי ההתחלה"), 400
+    pid = request.args.get("product_id")
+    pid = int(pid) if pid else None
+    if pid and not __import__("smartpricing.extensions", fromlist=["db"]).db.session.scalar(select(Product.id).where(Product.id == pid, Product.tenant_id == g.current_user.tenant_id)):
+        return jsonify(status="error", message="המוצר אינו שייך לארגון"), 403
+    return jsonify(period_report(g.current_user.tenant_id, start, end, pid, request.args.get("category"), request.args.get("entry_type")))
