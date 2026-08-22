@@ -5,13 +5,24 @@ os.environ.setdefault("FLASK_ENV", "development")
 os.environ.setdefault("DATABASE_URL", "sqlite:///test_module_navigation.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
+from werkzeug.security import generate_password_hash
+
 from smartpricing.app_factory import create_app
+from smartpricing.extensions import db
+from smartpricing.models import User
 
 app = create_app()
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _login(client, role="admin"):
+    with app.app_context():
+        user = User.query.filter_by(username="test").first()
+        if user is None:
+            db.session.add(User(username="test", password=generate_password_hash("test-pass-123"), role=role))
+        else:
+            user.role = role
+        db.session.commit()
     with client.session_transaction() as session:
         session.update(logged_in=True, username="test", role=role)
 
