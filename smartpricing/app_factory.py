@@ -31,10 +31,22 @@ def _asset(path, version):
 
 
 def _module_scripts(path):
-    """Load only the feature assets owned by the active workspace."""
+    """Load only assets owned by the active workspace.
+
+    The root page contains two legacy workspaces for backwards compatibility,
+    but Reports is a separate module. In particular, the period-report loader
+    must never run on the Daily or Pricing workspace because it dynamically
+    mounts a Reports UI into #left-panel.
+    """
     common = [_asset("module-shell.js", 2), _asset("table-filters.js", 1)]
     if path == "/":
-        return common + [_asset("period-report-loader.js", 4), _asset("browser-price-sync.js", 6), _asset("mobile-product-picker.js", 2), _asset("ui-stability.js", 3), _asset("app-shell-stability.js", 3), _asset("report-sort.js", 1)]
+        return common + [
+            _asset("browser-price-sync.js", 6),
+            _asset("mobile-product-picker.js", 2),
+            _asset("ui-stability.js", 3),
+            _asset("app-shell-stability.js", 3),
+            _asset("report-sort.js", 1),
+        ]
     if path == "/periodic-report":
         return common + [_asset("reports-module.js", 2)]
     if path == "/settings":
