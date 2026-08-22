@@ -3,9 +3,6 @@
 
   const $ = id => document.getElementById(id);
 
-  // The legacy inline UI had a typo (product-tag vs prod-tag) that could
-  // abort the rest of the reset flow. Keep the public function name stable
-  // while providing one safe implementation used by all screens.
   function installProductFormReset() {
     const form = $('product-form');
     if (!form || form.dataset.stabilityReset === '1') return;
@@ -27,8 +24,6 @@
     };
   }
 
-  // Prevent accidental double-submit while the active submit handler is
-  // waiting for the server. This applies to the daily entry form only.
   function installDailySubmitGuard() {
     const form = $('entry-form');
     const btn = $('entry-submit-btn');
@@ -37,13 +32,40 @@
     form.addEventListener('submit', () => {
       if (btn.dataset.stabilityBusy === '1') return;
       btn.dataset.stabilityBusy = '1';
-      setTimeout(() => { btn.dataset.stabilityBusy = '0'; }, 1500);
+      btn.classList.add('ui-action-busy');
+      btn.setAttribute('aria-busy', 'true');
+      setTimeout(() => {
+        btn.dataset.stabilityBusy = '0';
+        btn.classList.remove('ui-action-busy');
+        btn.removeAttribute('aria-busy');
+      }, 1500);
     }, true);
   }
 
-  // Keep the selected daily date and period panel synchronized when users
-  // switch views. The daily screen remains a real daily-entry screen; the
-  // period display is additive and never replaces it.
+  function installActionFeedback() {
+    if (window.__uiStabilityFeedback) return;
+    window.__uiStabilityFeedback = true;
+
+    document.addEventListener('click', event => {
+      const button = event.target.closest('button[type="submit"], button[data-loading], .js-loading-button');
+      if (!button || button.disabled) return;
+      if (button.dataset.noLoading === '1') return;
+      button.classList.add('ui-action-busy');
+      button.setAttribute('aria-busy', 'true');
+      const original = button.innerHTML;
+      button.dataset.originalHtml = original;
+      const icon = button.querySelector('i');
+      if (icon) icon.className = 'fa-solid fa-spinner fa-spin';
+      else if (!button.querySelector('.ui-spinner')) button.insertAdjacentHTML('afterbegin', '<i class="fa-solid fa-spinner fa-spin ui-spinner"></i> ');
+      window.setTimeout(() => {
+        if (!button.isConnected) return;
+        button.classList.remove('ui-action-busy');
+        button.removeAttribute('aria-busy');
+        if (button.dataset.originalHtml) button.innerHTML = button.dataset.originalHtml;
+      }, 2500);
+    }, true);
+  }
+
   function installViewSafety() {
     if (window.__uiStabilityViewSafety) return;
     window.__uiStabilityViewSafety = true;
@@ -57,6 +79,7 @@
   function init() {
     installProductFormReset();
     installDailySubmitGuard();
+    installActionFeedback();
     installViewSafety();
   }
 
