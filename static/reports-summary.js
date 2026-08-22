@@ -99,7 +99,17 @@
     if (get('averageDay')) get('averageDay').textContent = money(days.size ? grand / days.size : 0);
   }
 
+  function renderAll(entries, products, renderTable) {
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    const safeProducts = products || {};
+    renderKpis(safeEntries, safeProducts);
+    if (typeof renderTable === 'function') renderTable();
+    renderProductSummary(safeEntries, safeProducts);
+    renderDaySummary(safeEntries, safeProducts);
+  }
+
   window.ReportsSummary = Object.freeze({
+    renderAll,
     renderKpis,
     renderProductSummary,
     renderDaySummary,
