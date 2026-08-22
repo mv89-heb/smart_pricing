@@ -21,6 +21,7 @@
   }
 
   function roleLabel(role) { return role === 'admin' ? 'מנהל' : role === 'editor' ? 'עורך' : 'צפייה'; }
+  function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
   function linkMarkup(key) { const m = modules[key]; return `<a class="module-shell-link" data-module="${key}" href="${m.href}"><i class="fa-solid ${m.icon}"></i><span>${m.label}</span></a>`; }
 
   function createSidebar(active, user) {
@@ -35,18 +36,17 @@
     const m = modules[active];
     const el = document.createElement('div');
     el.className = 'module-shell-topbar';
-    el.innerHTML = `<div class="module-shell-title"><button class="module-shell-mobile-toggle" type="button" aria-label="תפריט" onclick="document.body.classList.toggle('module-shell-mobile-open')"><i class="fa-solid fa-bars"></i></button><div class="module-shell-title-icon"><i class="fa-solid ${m.icon}"></i></div><div><h1>${m.label}</h1><p>${m.subtitle}</p></div></div><div class="module-shell-actions"><button class="module-shell-icon-btn" type="button" title="מצב כהה" onclick="window.moduleShellToggleTheme?.()"><i class="fa-solid fa-moon"></i></button><button class="module-shell-icon-btn" type="button" title="מסך מלא" onclick="document.documentElement.requestFullscreen?.().catch(()=>{})"><i class="fa-solid fa-expand"></i></button><a class="module-shell-icon-btn" href="/logout" title="יציאה"><i class="fa-solid fa-right-from-bracket"></i></a></div>`;
+    el.innerHTML = `<div class="module-shell-title"><button class="module-shell-mobile-toggle" type="button" aria-label="תפריט" aria-expanded="false"><i class="fa-solid fa-bars"></i></button><div class="module-shell-title-icon"><i class="fa-solid ${m.icon}"></i></div><div><h1>${m.label}</h1><p>${m.subtitle}</p></div></div><div class="module-shell-actions"><button class="module-shell-icon-btn" type="button" data-shell-theme title="מצב כהה" aria-label="מצב כהה"><i class="fa-solid fa-moon"></i></button><button class="module-shell-icon-btn" type="button" data-shell-fullscreen title="מסך מלא" aria-label="מסך מלא"><i class="fa-solid fa-expand"></i></button><a class="module-shell-icon-btn" href="/logout" title="יציאה" aria-label="יציאה"><i class="fa-solid fa-right-from-bracket"></i></a></div>`;
     return el;
   }
 
   function createMobileNav(active) {
     const el = document.createElement('nav');
     el.className = 'module-shell-mobile-nav';
+    el.setAttribute('aria-label','ניווט מהיר');
     el.innerHTML = Object.entries(modules).map(([key,m]) => `<a data-module="${key}" href="${m.href}" class="${key===active?'active':''}"><i class="fa-solid ${m.icon}"></i><span>${m.label}</span></a>`).join('');
     return el;
   }
-
-  function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
   async function getUser() {
     try { const response = await fetch('/api/current_user', {credentials:'same-origin', cache:'no-store'}); if (!response.ok) return null; return await response.json(); }
@@ -77,6 +77,24 @@
     window.moduleShellToggleTheme = () => { const dark = document.documentElement.classList.toggle('dark'); localStorage.setItem('theme', dark ? 'dark' : 'light'); };
   }
 
+  function bindInteractions() {
+    const toggle = document.querySelector('.module-shell-mobile-toggle');
+    toggle?.addEventListener('click', () => {
+      const open = document.body.classList.toggle('module-shell-mobile-open');
+      toggle.setAttribute('aria-expanded', String(open));
+    });
+    document.querySelector('[data-shell-theme]')?.addEventListener('click', () => window.moduleShellToggleTheme?.());
+    document.querySelector('[data-shell-fullscreen]')?.addEventListener('click', async () => {
+      try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); } catch (_) {}
+    });
+    document.querySelectorAll('.module-shell-link,.module-shell-mobile-nav a').forEach(link => {
+      link.addEventListener('click', () => document.body.classList.remove('module-shell-mobile-open'));
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') document.body.classList.remove('module-shell-mobile-open');
+    });
+  }
+
   async function init() {
     const active = currentModule(); const user = await getUser();
     document.body.classList.add('module-shell-ready', `module-shell-${active}`); applyTheme();
@@ -94,6 +112,7 @@
 
     document.body.prepend(main); document.body.prepend(sidebar); document.body.appendChild(createMobileNav(active));
     const title = document.querySelector('title'); if (title) title.textContent = `${modules[active].label} | Smart Pricing`;
+    bindInteractions();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true}); else init();
