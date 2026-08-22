@@ -1,38 +1,45 @@
 """Canonical price lookups.
 
-Previously price_for_date existed in THREE places:
-- app.py / api_routes.py: fetch all history rows, fall back to the EARLIEST
-  known history price if the requested date is before all of them (or to
-  product.price only if there is no history at all).
-- wsgi.py's "fast" replacement: a single indexed query that instead fell
-  back straight to product.price whenever no row matched. That's a different,
-  wrong answer for a date older than any recorded price change - but it never
-  actually ran in production, because it patched `app` the *module* import,
-  not `app.price_for_date` on the Flask *instance*, which is what
-  api_routes.py sets and what every route actually calls. So the fast version
-  was dead code with a latent bug in it.
-
-This is the one implementation now, using the app.py/api_routes.py semantics
-(the ones that were actually live, and that the existing regression test
-tests/test_price_history_integrity.py depends on), written as a single
-indexed query for efficiency.
+All price-by-date decisions live here so daily billing, reports, scheduling,
+and dashboard code use exactly the same historical-price semantics.
 """
 from ..models import PriceHistory
 from ..utils import money, today_iso
 
 
 def price_for_date(product, iso_date):
-    rows = (
-        PriceHistory.query.filter_by(product_id=product.id)
-        .order_by(PriceHistory.effective_from.asc(), PriceHistory.id.asc())
-        .all()
+    """Return the price effective on ``iso_date`` with an indexed DB lookup.
+
+    If the requested date predates the first known history row, the earliest
+    known price is retained for backward compatibility. If no history exists,
+    the product's current price is used.
+    """
+    candidate = (
+        PriceHistory.query
+        .filter(
+            PriceHistory.product_id == product.id,
+            PriceHistory.effective_from.isnot(None),
+            PriceHistory.effective_from <= iso_date,
+        )
+        .order_by(PriceHistory.effective_from.desc(), PriceHistory.id.desc())
+        .first()
     )
-    if not rows:
-        return money(product.price)
-    candidates = [row for row in rows if row.effective_from and row.effective_from <= iso_date]
-    if candidates:
-        return money(candidates[-1].price)
-    return money(rows[0].price)
+    if candidate is not None:
+        return money(candidate.price)
+
+    earliest = (
+        PriceHistory.query
+        .filter(
+            PriceHistory.product_id == product.id,
+            PriceHistory.effective_from.isnot(None),
+        )
+        .order_by(PriceHistory.effective_from.asc(), PriceHistory.id.asc())
+        .first()
+    )
+    if earliest is not None:
+        return money(earliest.price)
+
+    return money(product.price)
 
 
 def price_history_json(product):

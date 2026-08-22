@@ -1,10 +1,15 @@
 """Database models. Schema is unchanged from the original application -
 existing SQLite/PostgreSQL databases keep working with these definitions."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Numeric
 
 from .extensions import db
+
+
+def utc_now_naive():
+    """UTC timestamp without tzinfo for the existing DateTime schema."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Product(db.Model):
@@ -30,7 +35,7 @@ class PriceHistory(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey("product.id", ondelete="CASCADE"), nullable=False, index=True)
     price = db.Column(Numeric(12, 2), nullable=False)
     effective_from = db.Column(db.String(10), nullable=True, index=True)
-    changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    changed_at = db.Column(db.DateTime, default=utc_now_naive, nullable=False)
     changed_by = db.Column(db.String(100), default="מערכת", nullable=False)
 
 
@@ -44,7 +49,7 @@ class PeriodLock(db.Model):
 
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=utc_now_naive)
     action = db.Column(db.String(50), nullable=False)
     details = db.Column(db.String(1000), nullable=False)
     username = db.Column(db.String(100), default="מערכת")
@@ -68,4 +73,4 @@ class BillingTemplateItem(db.Model):
     template_id = db.Column(db.Integer, db.ForeignKey("billing_template.id"), nullable=False)
     product_name = db.Column(db.String(100), nullable=False)
     quantity = db.Column(db.Float, nullable=False)
-    is_extra = db.Column(db.Boolean, default=False)
+    is_extra = db.Column(db.Boolean, default=False, nullable=False)

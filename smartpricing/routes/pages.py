@@ -71,4 +71,10 @@ def logout():
 
 @bp.get("/api/current_user")
 def current_user():
-    return jsonify({"username": session.get("username"), "role": session.get("role", "viewer")})
+    username = session.get("username")
+    user = User.query.filter_by(username=username).first() if username else None
+    if not user:
+        session.clear()
+        return jsonify({"username": None, "role": "viewer"})
+    session["role"] = user.role
+    return jsonify({"username": user.username, "role": user.role})

@@ -7,14 +7,24 @@ os.environ["DATABASE_URL"] = f"sqlite:///{DB_FILE.name}"
 os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["FLASK_ENV"] = "development"
 
+from werkzeug.security import generate_password_hash
+
 from smartpricing.app_factory import create_app
 from smartpricing.extensions import db
-from smartpricing.models import DailyEntry, PeriodLock, Product
+from smartpricing.models import DailyEntry, PeriodLock, Product, User
 
 app = create_app()
 
 
 def auth(client, role="admin"):
+    """Create a real DB-backed test user before seeding the session."""
+    with app.app_context():
+        user = User.query.filter_by(username="tester").first()
+        if user is None:
+            db.session.add(User(username="tester", password=generate_password_hash("test-pass-123"), role=role))
+        else:
+            user.role = role
+        db.session.commit()
     with client.session_transaction() as sess:
         sess["logged_in"] = True
         sess["username"] = "tester"

@@ -1,10 +1,8 @@
-from datetime import datetime
-
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..extensions import db
-from ..models import PriceHistory, Product
+from ..models import PriceHistory, Product, utc_now_naive
 from ..security import log_activity, write_access
 from ..services.periods import is_locked
 from ..services.pricing import price_history_json
@@ -14,7 +12,8 @@ bp = Blueprint("products", __name__)
 
 
 def _actor():
-    return request.environ.get("REMOTE_USER") or "מערכת"
+    """Return the authenticated username for audit/history records."""
+    return str(session.get("username") or "מערכת")[:100]
 
 
 def _upsert_price_history(product, price, effective, actor):
@@ -26,7 +25,7 @@ def _upsert_price_history(product, price, effective, actor):
     )
     if existing:
         existing.price = price
-        existing.changed_at = datetime.utcnow()
+        existing.changed_at = utc_now_naive()
         existing.changed_by = actor
         return existing
     row = PriceHistory(

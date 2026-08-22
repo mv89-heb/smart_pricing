@@ -37,7 +37,6 @@ def reset_user_password(user_id):
 
 @bp.get("/api/users")
 def list_users():
-    """Previously missing - the admin panel's user table had no route to load from."""
     denied = admin_access()
     if denied:
         return denied
@@ -46,10 +45,6 @@ def list_users():
 
 @bp.post("/api/users")
 def create_or_update_user():
-    """Previously missing. Also serves as the admin panel's "edit user" action:
-    the form disables the username field and allows an empty password when
-    editing, so an existing username with a blank password updates the role
-    only, without touching the stored password hash."""
     denied = admin_access()
     if denied:
         return denied
@@ -62,16 +57,23 @@ def create_or_update_user():
     user = User.query.filter_by(username=username).first()
     try:
         if user:
+            # Never allow an update to remove the last administrative account.
+            if user.role == "admin" and role != "admin" and User.query.filter_by(role="admin").count() <= 1:
+                return jsonify({"success": False, "error": "לא ניתן להוריד את מנהל המערכת האחרון מהרשאת מנהל"}), 400
             user.role = role
             if password:
-                if len(password) < 8:
+                if not isinstance(password, str) or len(password) < 8:
                     return jsonify({"success": False, "error": "סיסמה חייבת להכיל לפחות 8 תווים"}), 400
+                if len(password) > 128:
+                    return jsonify({"success": False, "error": "סיסמה ארוכה מדי"}), 400
                 user.password = generate_password_hash(password)
             db.session.commit()
             log_activity("USER_UPDATED", f"עודכן משתמש: {username} ({role})")
             return jsonify({"success": True, "id": user.id, "username": user.username, "role": user.role})
-        if not password or len(password) < 8:
+        if not password or not isinstance(password, str) or len(password) < 8:
             return jsonify({"success": False, "error": "סיסמה חייבת להכיל לפחות 8 תווים"}), 400
+        if len(password) > 128:
+            return jsonify({"success": False, "error": "סיסמה ארוכה מדי"}), 400
         new_user = User(username=username, password=generate_password_hash(password), role=role)
         db.session.add(new_user)
         db.session.commit()
@@ -84,8 +86,6 @@ def create_or_update_user():
 
 @bp.route("/api/users/<int:user_id>", methods=["DELETE"])
 def delete_user(user_id):
-    """Previously missing. Refuses to remove the last remaining admin account
-    so the system can never be left with no one able to manage it."""
     denied = admin_access()
     if denied:
         return denied

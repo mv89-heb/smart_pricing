@@ -4,15 +4,20 @@ import tempfile
 DB_FILE=tempfile.NamedTemporaryFile(suffix='.db',delete=False);DB_FILE.close()
 os.environ['DATABASE_URL']=f'sqlite:///{DB_FILE.name}';os.environ['SECRET_KEY']='test-secret-key';os.environ['FLASK_ENV']='development'
 
+from werkzeug.security import generate_password_hash
+
 from smartpricing.app_factory import create_app
 from smartpricing.extensions import db
-from smartpricing.models import DailyEntry
+from smartpricing.models import DailyEntry, User
 from smartpricing.services.reports import build_period_report
 
 app=create_app()
 
 def setup_function(_):
-    with app.app_context(): db.drop_all();db.create_all()
+    with app.app_context():
+        db.drop_all();db.create_all()
+        db.session.add(User(username='test',password=generate_password_hash('test-pass-123'),role='admin'))
+        db.session.commit()
 
 def _login(client):
     with client.session_transaction() as session: session.update(logged_in=True,username='test',role='admin')
