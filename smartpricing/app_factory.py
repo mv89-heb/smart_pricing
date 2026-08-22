@@ -90,6 +90,10 @@ def create_app():
         if "text/html" not in response.headers.get("Content-Type", ""):
             return response
         try:
+            # send_from_directory/send_file responses use direct_passthrough;
+            # disable it before reading and rewriting the HTML body.
+            if response.direct_passthrough:
+                response.direct_passthrough = False
             body = response.get_data(as_text=True)
             css_assets = [
                 '<link rel="stylesheet" href="/static/responsive-layout.css?v=1">',
