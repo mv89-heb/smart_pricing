@@ -100,6 +100,7 @@ def test_feature_scripts_are_scoped_to_their_own_modules():
     assert "module-shell.js" in reports and "report-sort.js" in reports
     assert "module-shell.js" in dashboard
     assert "module-shell.js" in settings and "password-reset.js" in settings
+    assert "report-sort.js" not in settings
     assert "browser-price-sync.js" not in reports
     assert "browser-price-sync.js" not in dashboard
     assert "global-filters.js" not in settings
