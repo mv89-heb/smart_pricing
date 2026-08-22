@@ -1,25 +1,23 @@
-from flask import Blueprint, jsonify, session
-
+from flask import Blueprint, jsonify
+from sqlalchemy import inspect, text
 from ..extensions import db
 
-bp = Blueprint("system", __name__)
-
-_REQUIRED_TABLES = ["product", "daily_entry", "price_history", "period_lock", "activity_log", "user", "billing_template", "billing_template_item"]
+system_bp = Blueprint("system", __name__)
 
 
-@bp.get("/api/system/health")
-def system_health():
-    """Authenticated, low-detail readiness check used by the UI and deploy debugging."""
-    if not session.get("logged_in"):
-        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+@system_bp.get("/health")
+def health():
     try:
-        from sqlalchemy import text
-        inspector = db.inspect(db.engine)
-        existing = set(inspector.get_table_names())
-        missing = [table for table in _REQUIRED_TABLES if table not in existing]
-        if missing:
-            return jsonify({"ok": False, "error": "מסד הנתונים אינו מעודכן", "database": db.engine.name, "tables_checked": len(_REQUIRED_TABLES), "missing": missing}), 503
         db.session.execute(text("SELECT 1"))
-        return jsonify({"ok": True, "database": db.engine.name, "tables_checked": len(_REQUIRED_TABLES), "missing": []})
+        return jsonify(status="ok", database="ok")
     except Exception:
-        return jsonify({"ok": False, "error": "מסד הנתונים אינו זמין", "database": db.engine.name, "tables_checked": len(_REQUIRED_TABLES)}), 503
+        db.session.rollback()
+        return jsonify(status="degraded", database="error"), 503
+
+
+@system_bp.get("/api/system/health")
+def detailed_health():
+    required = ["tenants", "users", "products", "price_history", "daily_entries", "period_locks", "activity_logs", "billing_templates", "billing_template_items"]
+    inspector = inspect(db.engine)
+    missing = [name for name in required if not inspector.has_table(name)]
+    return jsonify(status="ok" if not missing else "degraded", database=str(db.engine.url).split("@")[0], missing_tables=missing)
