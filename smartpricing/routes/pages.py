@@ -8,9 +8,21 @@ from ..security import log_activity, login_rate_limited
 bp = Blueprint("pages", __name__)
 
 
+def _inject_page_assets(html):
+    """Attach page-level assets without mixing module markup into templates."""
+    if "</head>" not in html:
+        return html
+    assets = (
+        '<link rel="stylesheet" href="/static/daily-module-focus.css?v=1">'
+        '<script src="/static/daily-module-focus.js?v=1" defer></script>'
+    )
+    return html.replace("</head>", assets + "</head>", 1)
+
+
 @bp.route("/")
 def index():
     html = render_template("index.html")
+    html = _inject_page_assets(html)
     if "</body>" in html:
         html = html.replace(
             "</body>",
@@ -66,8 +78,5 @@ def logout():
 
 @bp.get("/api/current_user")
 def current_user():
-    """Previously missing entirely - templates/index.html calls this on every
-    page load to show the logged-in user's name/role and to reveal the admin
-    panel button, so without it the admin panel was effectively unreachable
-    from the UI."""
+    """Return the current session user for the shell and page UI."""
     return jsonify({"username": session.get("username"), "role": session.get("role", "viewer")})
