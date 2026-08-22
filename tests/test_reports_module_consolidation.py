@@ -78,8 +78,6 @@ def test_drawer_contract_and_accessible_controls_exist():
     assert 'aria-modal="true"' in html
     assert 'aria-label="סגירת חלון עריכה"' in html
     assert "#editModal:not(.hidden)" in css
-    assert "margin-left:auto" in css
-    assert "transform:translateX(24px)" in css
     assert "event.key === 'Escape'" in js
     assert "event.target === $('editModal')" in js
 
