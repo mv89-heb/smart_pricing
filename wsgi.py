@@ -2,15 +2,11 @@ from app import app
 
 
 class UXInjectionMiddleware:
-    """Injects a presentation-only navigation shell into HTML responses.
-
-    The existing Flask routes, templates, API calls and business logic remain
-    untouched. The middleware only decorates the rendered HTML document.
-    """
+    """Inject a presentation-only navigation shell into HTML responses."""
 
     UX_HTML = r'''<style>
-:root{--ux-primary:#4f46e5;--ux-primary-2:#6366f1;--ux-ink:#0f172a;--ux-muted:#64748b;--ux-border:#e2e8f0;--ux-bg:#f8fafc}
-#ux-shell{position:fixed;inset:0 auto 0 0;width:248px;background:rgba(255,255,255,.97);border-right:1px solid var(--ux-border);box-shadow:0 10px 40px rgba(15,23,42,.08);z-index:40;display:flex;flex-direction:column;direction:rtl;font-family:Heebo,system-ui,sans-serif}
+:root{--ux-primary:#4f46e5;--ux-primary-2:#6366f1;--ux-ink:#0f172a;--ux-muted:#64748b;--ux-border:#e2e8f0}
+#ux-shell{position:fixed;inset:0 0 0 auto;width:248px;background:rgba(255,255,255,.97);border-left:1px solid var(--ux-border);box-shadow:0 10px 40px rgba(15,23,42,.08);z-index:40;display:flex;flex-direction:column;direction:rtl;font-family:Heebo,system-ui,sans-serif}
 #ux-shell .ux-brand{padding:22px 18px 18px;border-bottom:1px solid var(--ux-border)}
 #ux-shell .ux-brand-row{display:flex;align-items:center;gap:11px}
 #ux-shell .ux-logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--ux-primary-2),var(--ux-primary));color:#fff;display:grid;place-items:center;box-shadow:0 8px 18px rgba(79,70,229,.25)}
@@ -31,11 +27,10 @@ class UXInjectionMiddleware:
 #ux-mobile-nav{display:none}
 #ux-shell .ux-admin{display:none}
 body.ux-ready .app-ui>header{display:none!important}
-body.ux-ready .app-ui>main{margin-left:0!important;margin-right:0!important;max-width:none!important;padding:24px 28px 32px 276px!important}
+body.ux-ready .app-ui>main{margin-left:0!important;margin-right:0!important;max-width:none!important;padding:24px 276px 32px 28px!important}
 body.ux-ready .app-ui>main>div{max-width:1500px;margin:0 auto}
 body.ux-ready #right-panel>div{top:24px!important;height:calc(100vh - 56px)!important}
-body.ux-ready #left-panel{min-width:0}
-body.ux-ready #right-panel{min-width:0}
+body.ux-ready #left-panel,body.ux-ready #right-panel{min-width:0}
 body.ux-ready .bg-white.rounded-2xl{box-shadow:0 8px 30px rgba(15,23,42,.045)}
 @media(max-width:900px){
  #ux-shell{display:none}
@@ -86,9 +81,16 @@ body.ux-ready .bg-white.rounded-2xl{box-shadow:0 8px 30px rgba(15,23,42,.045)}
     admin(){this.active('admin');if(typeof openAdminPanel==='function')openAdminPanel();}
   };
   window.UX=UX;
-  function syncUser(){const b=document.getElementById('user-badge'),u=document.getElementById('ux-user');if(b&&u)u.textContent=b.textContent;if(window.currentUserRole==='admin'){document.querySelectorAll('.ux-admin').forEach(e=>e.style.display='flex');}}
+  function syncUser(){
+    const b=document.getElementById('user-badge'),u=document.getElementById('ux-user');
+    if(b&&u)u.textContent=b.textContent;
+    const originalAdmin=document.getElementById('admin-panel-btn');
+    const isAdmin=originalAdmin && !originalAdmin.classList.contains('hidden');
+    document.querySelectorAll('.ux-admin').forEach(e=>e.style.display=isAdmin?'flex':'none');
+    document.querySelectorAll('.ux-admin-section').forEach(e=>e.style.display=isAdmin?'block':'none');
+  }
   window.addEventListener('load',function(){document.body.classList.add('ux-ready');syncUser();setTimeout(syncUser,500);setTimeout(syncUser,1500);});
-  const observer=new MutationObserver(syncUser);observer.observe(document.body,{subtree:true,childList:true,characterData:true});
+  const observer=new MutationObserver(syncUser);observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class']});
 })();
 </script>'''
 
