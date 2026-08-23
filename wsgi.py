@@ -1,4 +1,4 @@
-"""WSGI entrypoint with safe deployment-time database recovery."""
+"""WSGI entrypoint with non-blocking production database recovery."""
 
 import os
 import threading
@@ -8,13 +8,19 @@ from sqlalchemy import text
 from smartpricing.app_factory import create_app
 from smartpricing.extensions import db
 from repair_db_indexes import repair
-from smartpricing.db_setup import bootstrap
+from smartpricing.db_setup import (
+    _create_all_idempotent,
+    _ensure_default_tenant_and_admin,
+    _normalize_legacy_table_names,
+    _repair_unhashed_users,
+)
+from smartpricing.legacy_recovery import recover
 
 app = create_app()
 
 
 def _run_startup_migration():
-    """Repair schema and migrate legacy data without blocking Gunicorn startup."""
+    """Prepare the schema and recover legacy data without blocking Gunicorn."""
     if os.getenv("AUTO_MIGRATE", "1") != "1":
         return
 
@@ -36,12 +42,26 @@ def _run_startup_migration():
             print("[startup] repairing PostgreSQL indexes...", flush=True)
             repaired = repair()
             print(f"[startup] repaired {repaired} index collision(s).", flush=True)
-            print("[startup] migrating legacy Smart Pricing data...", flush=True)
-            bootstrap()
-            print("[startup] database migration completed; serving application.", flush=True)
+
+            print("[startup] normalizing legacy table names...", flush=True)
+            _normalize_legacy_table_names()
+            session.commit()
+
+            print("[startup] creating canonical schema...", flush=True)
+            _create_all_idempotent()
+            session.commit()
+
+            print("[startup] recovering legacy Smart Pricing data...", flush=True)
+            results = recover()
+            print(f"[startup] recovery results: {results}", flush=True)
+
+            _ensure_default_tenant_and_admin()
+            _repair_unhashed_users()
+            session.commit()
+            print("[startup] database recovery completed; serving application.", flush=True)
         except Exception as exc:
             session.rollback()
-            print(f"[startup] database recovery deferred/failed: {exc!r}", flush=True)
+            print(f"[startup] database recovery failed: {exc!r}", flush=True)
         finally:
             if acquired:
                 try:
