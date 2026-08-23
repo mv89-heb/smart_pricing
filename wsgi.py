@@ -20,7 +20,13 @@ app = create_app()
 
 
 def _run_startup_migration():
-    """Prepare the schema and recover legacy data without blocking Gunicorn."""
+    """Prepare the schema and recover legacy data without blocking Gunicorn.
+
+    Render does not provide a pre-deploy command for this service, so recovery
+    runs in a daemon thread. PostgreSQL statement and lock timeouts are applied
+    explicitly: a blocked legacy query must fail and be retried on a later
+    deployment rather than keeping the recovery worker stuck indefinitely.
+    """
     if os.getenv("AUTO_MIGRATE", "1") != "1":
         return
 
@@ -32,9 +38,21 @@ def _run_startup_migration():
         lock_key = 729384019
         session = db.session
         acquired = False
+        statement_timeout_ms = max(
+            1000, int(os.getenv("DB_MIGRATION_STATEMENT_TIMEOUT_MS", "8000"))
+        )
         try:
             session.execute(text("SET lock_timeout = '5s'"))
-            acquired = bool(session.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": lock_key}))
+            session.execute(
+                text(f"SET statement_timeout = '{statement_timeout_ms}ms'")
+            )
+            session.execute(text("SET idle_in_transaction_session_timeout = '15s'"))
+
+            acquired = bool(
+                session.scalar(
+                    text("SELECT pg_try_advisory_lock(:key)"), {"key": lock_key}
+                )
+            )
             if not acquired:
                 print("[startup] migration already running; serving application.", flush=True)
                 return
@@ -65,7 +83,9 @@ def _run_startup_migration():
         finally:
             if acquired:
                 try:
-                    session.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": lock_key})
+                    session.execute(
+                        text("SELECT pg_advisory_unlock(:key)"), {"key": lock_key}
+                    )
                     session.commit()
                 except Exception:
                     session.rollback()
@@ -75,7 +95,11 @@ def _run_startup_migration():
 # in a daemon thread so Gunicorn binds $PORT immediately. The migration is
 # idempotent and protected by a PostgreSQL advisory lock.
 if os.getenv("AUTO_MIGRATE", "1") == "1":
-    threading.Thread(target=_run_startup_migration, name="db-recovery", daemon=True).start()
+    threading.Thread(
+        target=_run_startup_migration,
+        name="db-recovery",
+        daemon=True,
+    ).start()
 
 
 if __name__ == "__main__":
