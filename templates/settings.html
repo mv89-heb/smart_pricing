@@ -1,0 +1,322 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Smart Pricing — הגדרות</title><link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><link rel="stylesheet" href="/static/ux-refresh.css"></head><body>
+<main class="sp-page px-4 py-6 lg:py-10">
+
+<header class="sp-card sp-page-head">
+    <div>
+        <div class="sp-kicker">SMART PRICING · SETTINGS</div>
+        <h1 class="sp-title">הגדרות מערכת</h1>
+        <p class="sp-subtitle">משתמשים, הרשאות, יומן פעילות, גיבוי ועדכון מחירים גורף.</p>
+    </div>
+    <div class="sp-actions">
+        <a href="/" class="sp-btn"><i class="fa-solid fa-chart-column"></i> דוח</a>
+        <a href="/dashboard" class="sp-btn"><i class="fa-solid fa-chart-pie"></i> דשבורד</a>
+        <a href="/logout" class="sp-btn danger">יציאה</a>
+    </div>
+</header>
+
+<div class="sp-grid-2">
+
+    <div class="flex flex-col gap-6">
+
+        <!-- ניהול משתמשים - מנהל בלבד -->
+        <section id="users-section" class="sp-card overflow-hidden hidden">
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div><h2 class="text-lg font-black"><i class="fa-solid fa-users text-indigo-600 ml-1"></i> ניהול משתמשים</h2><p id="users-count" class="text-xs text-slate-400 mt-0.5">טוען...</p></div>
+            </div>
+            <div class="sp-table-wrap">
+                <table class="sp-table">
+                    <thead id="users-head"><tr><th data-sort-key="username" data-sort-type="text">שם משתמש</th><th data-sort-key="role" data-sort-type="text">תפקיד</th><th>פעולות</th></tr></thead>
+                    <tbody id="users-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- הוספה/עריכה של משתמש - מנהל בלבד -->
+        <section id="user-form-section" class="sp-card p-5 hidden">
+            <div class="sp-section-title"><i class="fa-solid fa-user-plus text-indigo-600"></i> <span id="user-form-title">משתמש חדש</span></div>
+            <form id="user-form" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                <div class="sp-field sm:col-span-2"><label>שם משתמש</label><input id="user-username" required class="sp-input"></div>
+                <div class="sp-field sm:col-span-2"><label id="user-password-label">סיסמה</label><input id="user-password" type="password" class="sp-input" placeholder=""></div>
+                <div class="sp-field sm:col-span-2"><label>תפקיד</label>
+                    <select id="user-role" class="sp-input">
+                        <option value="viewer">צפייה בלבד</option>
+                        <option value="editor">עורך</option>
+                        <option value="admin">מנהל</option>
+                    </select>
+                </div>
+                <div class="sm:col-span-2 flex gap-2">
+                    <button type="submit" class="sp-btn primary flex-1"><i class="fa-solid fa-floppy-disk"></i> <span id="user-submit-text">שמור משתמש</span></button>
+                    <button type="button" id="user-cancel-btn" class="sp-btn hidden">ביטול</button>
+                </div>
+            </form>
+            <div id="user-message" class="hidden mt-3"></div>
+        </section>
+
+        <!-- יומן פעילות - מנהל בלבד -->
+        <section id="logs-section" class="sp-card overflow-hidden hidden">
+            <div class="p-4 border-b border-slate-100"><h2 class="text-lg font-black"><i class="fa-solid fa-clock-rotate-left text-indigo-600 ml-1"></i> יומן פעילות</h2><p class="text-xs text-slate-400 mt-0.5">200 הפעולות האחרונות במערכת.</p></div>
+            <div class="sp-table-wrap" style="max-height:420px">
+                <table class="sp-table">
+                    <thead id="logs-head"><tr><th>זמן</th><th data-sort-key="user" data-sort-type="text">משתמש</th><th data-sort-key="action" data-sort-type="text">פעולה</th><th>פרטים</th></tr></thead>
+                    <tbody id="logs-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <aside class="flex flex-col gap-6">
+
+        <!-- אזור אישי - לכל משתמש מחובר -->
+        <section class="sp-card p-5">
+            <div class="sp-section-title"><i class="fa-solid fa-circle-user text-indigo-600"></i> האזור האישי שלי</div>
+            <div class="sp-insight mb-4"><span class="text-xs text-slate-500">מחובר בתור</span><br><strong id="me-username">—</strong> · <span id="me-role" class="text-xs text-slate-500"></span></div>
+            <form id="password-form" class="space-y-3">
+                <div><label class="block text-xs font-black mb-1">סיסמה נוכחית</label><input id="current-password" type="password" required class="sp-input"></div>
+                <div><label class="block text-xs font-black mb-1">סיסמה חדשה</label><input id="new-password" type="password" required minlength="4" class="sp-input"></div>
+                <button type="submit" class="sp-btn primary w-full"><i class="fa-solid fa-key"></i> החלף סיסמה</button>
+                <div id="password-message" class="hidden"></div>
+            </form>
+        </section>
+
+        <!-- מצב סנכרון מחירים - עורך ומנהל -->
+        <section id="sync-status-section" class="sp-card p-5 hidden">
+            <div class="sp-section-title"><i class="fa-solid fa-arrows-rotate text-indigo-600"></i> מצב סנכרון מחירים</div>
+            <p class="text-xs text-slate-500 mb-3">כל חיוב שומר את המחיר בזמן ההזנה (כדי שדוחות היסטוריים לא ישתנו). כאן ניתן לבדוק אם יש חיובים ללא מחיר שמור, או שמות מוצרים בחיובים שכבר לא קיימים במחירון הנוכחי (למשל אחרי מחיקה או טעות הקלדה בשם).</p>
+            <div id="sync-status-body" class="space-y-2 text-sm">
+                <div class="sp-loading">טוען...</div>
+            </div>
+            <button id="sync-reconcile-btn" class="sp-btn primary w-full mt-3 hidden"><i class="fa-solid fa-wand-magic-sparkles"></i> השלם מחירים חסרים</button>
+            <div id="sync-message" class="hidden mt-3"></div>
+        </section>
+
+        <!-- עדכון מחירים גורף - עורך ומנהל -->
+        <section id="bulk-price-section" class="sp-card p-5 hidden">
+            <div class="sp-section-title"><i class="fa-solid fa-arrow-trend-up text-indigo-600"></i> עדכון מחירים גורף</div>
+            <p class="text-xs text-slate-500 mb-3">עדכון כל המחירון באחוז אחיד בבת אחת (לדוגמה 5 להעלאה, 5- להוזלה).</p>
+            <div class="flex gap-2">
+                <input id="bulk-percent" type="number" step="0.1" class="sp-input" placeholder="אחוז שינוי, לדוגמה 5">
+                <button id="bulk-apply-btn" class="sp-btn dark whitespace-nowrap"><i class="fa-solid fa-bolt"></i> החל על הכל</button>
+            </div>
+            <div id="bulk-message" class="hidden mt-3"></div>
+        </section>
+
+        <!-- גיבוי - מנהל בלבד -->
+        <section id="backup-section" class="sp-card p-5 hidden">
+            <div class="sp-section-title"><i class="fa-solid fa-database text-indigo-600"></i> גיבוי נתונים</div>
+            <p class="text-xs text-slate-500 mb-3">הורדת קובץ JSON עם כל המחירון וכל החיובים הרשומים במערכת.</p>
+            <button id="backup-btn" class="sp-btn success w-full"><i class="fa-solid fa-download"></i> הורד גיבוי</button>
+        </section>
+
+    </aside>
+
+</div>
+</main>
+
+<script src="/static/table-sort.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const escAttr=esc;
+let currentRole='viewer', currentUsername='', editingUsername=null;
+const usersSort=createSortState(null,'text',1), logsSort=createSortState(null,'text',1);
+let usersData=[], logsData=[];
+
+function translateRole(role){ return role==='admin'?'מנהל':role==='editor'?'עורך':'צפייה בלבד'; }
+
+async function init(){
+    const res = await fetch('/api/current_user');
+    const me = await res.json();
+    currentRole = me.role; currentUsername = me.username;
+    $('me-username').textContent = me.username;
+    $('me-role').textContent = translateRole(me.role);
+
+    if (currentRole !== 'viewer') {
+        $('bulk-price-section').classList.remove('hidden');
+        $('sync-status-section').classList.remove('hidden');
+        loadSyncStatus();
+    }
+
+    if (currentRole === 'admin') {
+        ['users-section','user-form-section','logs-section','backup-section'].forEach(id => $(id).classList.remove('hidden'));
+        loadUsers();
+        loadLogs();
+    }
+}
+
+async function loadUsers(){
+    const r = await fetch('/api/users');
+    if (!r.ok) return;
+    usersData = await r.json();
+    $('users-count').textContent = `${usersData.length} משתמשים במערכת`;
+    renderUsers();
+}
+function renderUsers(){
+    const v = sortRows(usersData, usersSort);
+    $('users-table-body').innerHTML = v.map(u => `
+        <tr class="hover:bg-slate-50">
+            <td class="font-black">${esc(u.username)}</td>
+            <td><span class="sp-badge normal">${translateRole(u.role)}</span></td>
+            <td class="whitespace-nowrap">
+                <button type="button" class="sp-btn !p-1.5 edit-user-btn" data-username="${escAttr(u.username)}" data-role="${escAttr(u.role)}" title="עריכה"><i class="fa-solid fa-pen"></i></button>
+                <button type="button" class="sp-btn danger !p-1.5 del-user-btn" data-id="${u.id}" data-username="${escAttr(u.username)}" title="מחיקה"><i class="fa-solid fa-user-minus"></i></button>
+            </td>
+        </tr>`).join('');
+}
+$('users-table-body').addEventListener('click', e=>{
+    const editBtn=e.target.closest('.edit-user-btn');
+    if(editBtn){ startEditUser(editBtn.dataset.username, editBtn.dataset.role); return; }
+    const delBtn=e.target.closest('.del-user-btn');
+    if(delBtn){ deleteUser(parseInt(delBtn.dataset.id,10), delBtn.dataset.username); return; }
+});
+
+function startEditUser(username, role){
+    editingUsername=username;
+    $('user-username').value=username; $('user-username').disabled=true;
+    $('user-password').value=''; $('user-password').required=false;
+    $('user-password').placeholder='השאר ריק לשמירה על הסיסמה הקיימת';
+    $('user-role').value=role;
+    $('user-form-title').textContent=`עריכת משתמש: ${username}`;
+    $('user-submit-text').textContent='עדכן משתמש';
+    $('user-cancel-btn').classList.remove('hidden');
+    window.scrollTo({top:0, behavior:'smooth'});
+}
+function cancelUserEdit(){
+    editingUsername=null;
+    $('user-form').reset();
+    $('user-username').disabled=false;
+    $('user-password').required=true;
+    $('user-password').placeholder='';
+    $('user-form-title').textContent='משתמש חדש';
+    $('user-submit-text').textContent='שמור משתמש';
+    $('user-cancel-btn').classList.add('hidden');
+}
+$('user-cancel-btn').onclick=cancelUserEdit;
+
+$('user-form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const username=$('user-username').value.trim();
+    const password=$('user-password').value;
+    const role=$('user-role').value;
+    const msg=$('user-message');
+    const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,role})});
+    const d=await r.json();
+    if(!r.ok||!d.success){ msg.textContent=d.error||'שגיאה בשמירת המשתמש'; msg.className='sp-error-box'; return; }
+    msg.textContent=`המשתמש ${username} נשמר בהצלחה.`; msg.className='sp-success-box';
+    cancelUserEdit();
+    loadUsers(); loadLogs();
+});
+
+async function deleteUser(id, name){
+    if(!confirm(`האם למחוק את המשתמש ${name}?`)) return;
+    const r=await fetch(`/api/users/${id}`,{method:'DELETE'});
+    const d=await r.json();
+    if(!r.ok||!d.success){ alert(d.error||'מחיקה נכשלה'); return; }
+    loadUsers(); loadLogs();
+}
+
+async function loadLogs(){
+    const r=await fetch('/api/logs');
+    if(!r.ok) return;
+    logsData=await r.json();
+    renderLogs();
+}
+function renderLogs(){
+    const v = logsSort.key ? sortRows(logsData, logsSort) : logsData;
+    $('logs-table-body').innerHTML = v.map(l => `
+        <tr class="hover:bg-slate-50">
+            <td class="text-xs text-slate-500 whitespace-nowrap">${esc(l.time)}</td>
+            <td class="font-bold">${esc(l.user)}</td>
+            <td class="font-bold text-indigo-600">${esc(l.action)}</td>
+            <td class="text-slate-600">${esc(l.details)}</td>
+        </tr>`).join('');
+}
+
+$('password-form').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const msg=$('password-message');
+    const current_password=$('current-password').value;
+    const new_password=$('new-password').value;
+    const r=await fetch('/api/account/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_password,new_password})});
+    const d=await r.json();
+    if(!r.ok||!d.success){ msg.textContent=d.error||'שגיאה בהחלפת הסיסמה'; msg.className='sp-error-box'; return; }
+    msg.textContent='הסיסמה הוחלפה בהצלחה.'; msg.className='sp-success-box';
+    $('password-form').reset();
+});
+
+async function loadSyncStatus(){
+    const body=$('sync-status-body'), btn=$('sync-reconcile-btn');
+    try{
+        const r=await fetch('/api/price-sync/status');
+        const d=await r.json();
+        if(!r.ok) throw Error(d.error||'שגיאה בבדיקת סנכרון');
+        const rows=[];
+        rows.push(`<div class="flex justify-between"><span class="text-slate-500">מוצרים במחירון</span><strong>${d.products}</strong></div>`);
+        rows.push(`<div class="flex justify-between"><span class="text-slate-500">חיובים ללא מחיר שמור</span><strong class="${d.missing_price_snapshots>0?'text-amber-600':''}">${d.missing_price_snapshots}</strong></div>`);
+        if(d.orphan_entry_products && d.orphan_entry_products.length){
+            rows.push(`<div class="pt-2 border-t border-slate-100"><span class="text-slate-500 text-xs">שמות מוצרים בחיובים שלא קיימים היום במחירון (${d.orphan_entry_products.length}):</span><div class="flex flex-wrap gap-1.5 mt-1.5">${d.orphan_entry_products.map(n=>`<span class="sp-badge extra">${esc(n)}</span>`).join('')}</div></div>`);
+        }
+        body.innerHTML=rows.join('');
+        if(d.synchronized){
+            body.innerHTML+='<div class="sp-success-box mt-2"><i class="fa-solid fa-check"></i> הכל מסונכרן.</div>';
+            btn.classList.add('hidden');
+        }else{
+            btn.classList.toggle('hidden', d.missing_price_snapshots===0);
+        }
+    }catch(e){
+        body.innerHTML=`<div class="sp-error-box">${esc(e.message)}</div>`;
+    }
+}
+$('sync-reconcile-btn').onclick = async ()=>{
+    const msg=$('sync-message'), btn=$('sync-reconcile-btn');
+    btn.disabled=true;
+    try{
+        const r=await fetch('/api/price-sync/reconcile',{method:'POST'});
+        const d=await r.json();
+        if(!r.ok||!d.success) throw Error(d.error||'ההשלמה נכשלה');
+        msg.textContent=`${d.updated_snapshots} חיובים עודכנו למחיר הנוכחי במחירון.`;
+        msg.className='sp-success-box';
+        loadSyncStatus();
+    }catch(e){
+        msg.textContent=e.message; msg.className='sp-error-box';
+    }finally{
+        btn.disabled=false;
+    }
+};
+
+$('bulk-apply-btn').onclick = async ()=>{
+    const msg=$('bulk-message');
+    const percent=parseFloat($('bulk-percent').value);
+    if(isNaN(percent)){ msg.textContent='נא להזין אחוז תקין'; msg.className='sp-error-box'; return; }
+    const productsRes = await fetch('/api/products');
+    const products = await productsRes.json();
+    const names = Object.keys(products);
+    if(!names.length){ msg.textContent='אין מוצרים במחירון'; msg.className='sp-error-box'; return; }
+    if(!confirm(`לעדכן את כל ${names.length} המוצרים ב-${percent}%?`)) return;
+    $('bulk-apply-btn').disabled=true;
+    let ok=0;
+    for(const name of names){
+        const newPrice = Math.round(products[name]*(1+percent/100)*100)/100;
+        const r=await fetch('/api/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,price:newPrice})});
+        if(r.ok) ok++;
+    }
+    $('bulk-apply-btn').disabled=false;
+    msg.textContent=`עודכנו ${ok} מתוך ${names.length} מוצרים.`; msg.className='sp-success-box';
+};
+
+$('backup-btn').onclick = async ()=>{
+    const r=await fetch('/api/backup');
+    if(!r.ok){ alert('שגיאה בהורדת הגיבוי'); return; }
+    const data=await r.json();
+    const dataStr="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(data,null,2));
+    const a=document.createElement('a');
+    a.setAttribute('href',dataStr);
+    a.setAttribute('download',`system_backup_${data.timestamp.split(' ')[0]}.json`);
+    document.body.appendChild(a); a.click(); a.remove();
+};
+
+attachSortableHeaders($('users-head'), usersSort, renderUsers);
+attachSortableHeaders($('logs-head'), logsSort, renderLogs);
+init();
+</script>
+</body></html>
