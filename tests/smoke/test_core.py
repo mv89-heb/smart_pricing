@@ -1,11 +1,15 @@
 from datetime import date
 from smartpricing.app_factory import create_app
+from smartpricing.db_setup import bootstrap
 from smartpricing.extensions import db
 from smartpricing.models import Product, PriceHistory, DailyEntry
 
 
 def app():
-    return create_app({"TESTING": True, "SECRET_KEY": "test", "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"})
+    application = create_app({"TESTING": True, "SECRET_KEY": "test", "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"})
+    with application.app_context():
+        bootstrap()
+    return application
 
 
 def login(client):
