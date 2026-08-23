@@ -3,129 +3,113 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>דוח חיובים לפי תקופה</title>
+  <title>Smart Pricing — דוח חיובים לפי תקופה</title>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body { font-family: Heebo, sans-serif; }
-    .number { direction:ltr; unicode-bidi:plaintext; }
-    .sticky-head th { position:sticky; top:0; z-index:5; }
+    :root{--brand:#4f46e5;--nav:#0f172a}
+    *{box-sizing:border-box} body{font-family:Heebo,sans-serif;background:#f8fafc;color:#0f172a}
+    .number{direction:ltr;unicode-bidi:plaintext}.glass{background:rgba(255,255,255,.94);backdrop-filter:blur(8px)}
+    .sticky-head th{position:sticky;top:0;z-index:5}.table-scroll{scrollbar-gutter:stable}
+    .report-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(330px,.72fr);gap:18px;align-items:start}
+    .report-card{min-width:0}.price-card{position:sticky;top:82px;height:calc(100vh - 104px);min-height:620px}
+    .kpi{min-width:0}.kpi-value{white-space:nowrap}
+    @media(max-width:1200px){.report-grid{grid-template-columns:minmax(0,1fr) 320px}}
+    @media(max-width:1023px){body.sp-report-page{padding-right:0}.report-grid{grid-template-columns:1fr}.price-card{position:relative;top:auto;height:auto;min-height:0}.price-table-wrap{max-height:520px}}
+    @media(max-width:640px){.kpi-grid{grid-template-columns:1fr 1fr}.period-actions{width:100%}.period-actions>*{flex:1}.report-table{min-width:720px}.price-table{min-width:520px}}
+    @media print{.price-card,.period-actions,.search-row{display:none!important}.report-grid{display:block}.report-card{box-shadow:none!important;border:0!important}.table-scroll{max-height:none!important}}
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen">
-  <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
-    <div class="max-w-[1600px] mx-auto px-4 lg:px-8 h-16 flex items-center justify-between gap-4">
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="bg-indigo-600 text-white w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"><i class="fa-solid fa-chart-column"></i></div>
-        <div class="min-w-0">
-          <h1 class="font-extrabold text-lg sm:text-xl truncate">דוח חיובים לפי תקופה</h1>
-          <p class="text-xs text-slate-500 hidden sm:block">הצגה מלאה של כל החיובים בטווח שנבחר</p>
+<body class="sp-report-page min-h-screen">
+  <main class="px-3 sm:px-5 lg:px-7 py-4 lg:py-5 max-w-[1680px] mx-auto">
+    <header class="bg-white border border-slate-200 rounded-2xl shadow-sm px-4 lg:px-6 py-4 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div class="min-w-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm"><i class="fa-solid fa-chart-line"></i></div>
+          <div><h1 class="font-extrabold text-xl lg:text-2xl leading-tight">דוח חיובים לפי תקופה</h1><p class="text-xs text-slate-500">תצוגה מלאה של כל הנתונים בטווח שנבחר</p></div>
         </div>
       </div>
-      <div class="flex items-center gap-2">
-        <a href="/daily" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-pen-to-square"></i><span class="hidden sm:inline">דיווח יומי</span></a>
-        <a href="/logout" class="px-3 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-right-from-bracket"></i><span class="hidden sm:inline">יציאה</span></a>
+      <div class="flex items-center gap-2 print:hidden">
+        <a href="/daily" class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-pen-to-square"></i> דיווח יומי</a>
+        <a href="/logout" class="px-3 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-right-from-bracket"></i> יציאה</a>
       </div>
+    </header>
+
+    <div class="report-grid">
+      <!-- Main report -->
+      <section class="report-card bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div class="p-4 lg:p-5 border-b border-slate-100">
+          <div class="flex flex-col xl:flex-row xl:items-end gap-4 justify-between">
+            <div><h2 class="text-lg font-extrabold">תקופת הדוח</h2><p class="text-sm text-slate-500">ברירת המחדל: 3 חודשים אחורה ועד היום.</p></div>
+            <div class="period-actions flex flex-wrap items-end gap-2">
+              <label class="text-xs font-bold text-slate-600">מתאריך<input id="start-date" type="date" class="block mt-1 px-3 py-2 border border-slate-200 rounded-lg bg-white font-semibold"></label>
+              <label class="text-xs font-bold text-slate-600">עד תאריך<input id="end-date" type="date" class="block mt-1 px-3 py-2 border border-slate-200 rounded-lg bg-white font-semibold"></label>
+              <button data-months="3" class="preset active px-3 py-2 rounded-lg bg-indigo-600 text-white font-bold text-sm">3 חודשים</button>
+              <button data-months="6" class="preset px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-sm">6 חודשים</button>
+              <button data-month="current" class="preset px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-sm">חודש נוכחי</button>
+              <button data-days="7" class="preset px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-sm">7 ימים</button>
+              <button id="load-report" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm"><i class="fa-solid fa-rotate"></i> הצג נתונים</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="kpi-grid grid grid-cols-2 lg:grid-cols-5 gap-3 p-4 lg:p-5 border-b border-slate-100">
+          <div class="kpi rounded-xl border border-blue-100 bg-blue-50/60 p-3"><p class="text-xs text-slate-500">מספר חיובים</p><p id="summary-entries" class="kpi-value text-2xl font-extrabold mt-1 text-blue-700">0</p></div>
+          <div class="kpi rounded-xl border border-amber-100 bg-amber-50/60 p-3"><p class="text-xs text-slate-500">סה״כ כמות</p><p id="summary-quantity" class="kpi-value text-2xl font-extrabold mt-1 text-amber-700">0</p></div>
+          <div class="kpi rounded-xl border border-indigo-100 bg-indigo-50/60 p-3"><p class="text-xs text-slate-500">חיובים רגילים</p><p id="summary-regular" class="kpi-value text-xl font-extrabold mt-1 text-indigo-700">0 ₪</p></div>
+          <div class="kpi rounded-xl border border-orange-100 bg-orange-50/60 p-3"><p class="text-xs text-slate-500">אקסטרות</p><p id="summary-extra" class="kpi-value text-xl font-extrabold mt-1 text-orange-600">0 ₪</p></div>
+          <div class="kpi rounded-xl bg-slate-900 text-white p-3 col-span-2 lg:col-span-1"><p class="text-xs text-slate-300">סה״כ לתקופה</p><p id="summary-total" class="kpi-value text-xl font-extrabold mt-1">0 ₪</p></div>
+        </div>
+
+        <div class="search-row px-4 lg:px-5 py-3 border-b border-slate-100 flex flex-col sm:flex-row gap-3 justify-between items-center">
+          <div class="font-bold text-sm"><span id="period-label">טוען...</span> <span id="row-count" class="text-xs text-slate-400"></span></div>
+          <div class="relative w-full sm:w-80"><i class="fa-solid fa-magnifying-glass absolute right-3 top-3 text-slate-400"></i><input id="table-search" type="search" placeholder="חיפוש לפי מוצר או תאריך..." class="w-full px-9 py-2 border border-slate-200 rounded-lg bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-500"></div>
+        </div>
+
+        <div class="table-scroll overflow-auto max-h-[calc(100vh-410px)] min-h-[480px]">
+          <table class="report-table min-w-full text-sm">
+            <thead class="sticky-head bg-slate-100 text-slate-600"><tr>
+              <th class="px-4 py-3 text-right font-bold">תאריך</th><th class="px-4 py-3 text-right font-bold">מוצר</th><th class="px-4 py-3 text-center font-bold">סוג</th><th class="px-4 py-3 text-center font-bold">כמות</th><th class="px-4 py-3 text-center font-bold">מחיר יחידה</th><th class="px-4 py-3 text-center font-bold">סה״כ</th>
+            </tr></thead>
+            <tbody id="report-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+        <div id="empty-state" class="hidden p-12 text-center text-slate-500"><i class="fa-regular fa-folder-open text-3xl mb-3"></i><p class="font-bold">אין חיובים בתקופה שנבחרה</p></div>
+      </section>
+
+      <!-- Price list beside the report -->
+      <aside class="price-card bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50/70">
+          <div class="flex items-center gap-2"><div class="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center"><i class="fa-solid fa-tags"></i></div><div><h2 class="font-extrabold">מחירון מוצרים</h2><p id="product-count" class="text-xs text-slate-400">טוען...</p></div></div>
+          <a href="/daily#price-list" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5"><i class="fa-solid fa-plus"></i> מוצר חדש</a>
+        </div>
+        <div class="p-3 border-b border-slate-100">
+          <div class="relative"><i class="fa-solid fa-magnifying-glass absolute right-3 top-3 text-slate-400"></i><input id="product-search" type="search" placeholder="חיפוש מוצר..." class="w-full px-9 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"></div>
+        </div>
+        <div class="price-table-wrap overflow-auto flex-1 min-h-0">
+          <table class="price-table min-w-full text-sm"><thead class="sticky-head bg-slate-100"><tr><th class="px-3 py-3 text-right font-bold">מוצר</th><th class="px-3 py-3 text-center font-bold">מחיר יחידה</th><th class="px-3 py-3 text-center font-bold">פעולות</th></tr></thead><tbody id="product-body" class="divide-y divide-slate-100"></tbody></table>
+        </div>
+        <div class="p-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between"><span>המחיר הנוכחי משמש לחיובים חדשים</span><a href="/daily#price-list" class="font-bold text-indigo-600 hover:text-indigo-800">ניהול מלא</a></div>
+      </aside>
     </div>
-  </header>
-
-  <main class="max-w-[1600px] mx-auto px-4 lg:px-8 py-6 space-y-5">
-    <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 lg:p-5">
-      <div class="flex flex-col xl:flex-row xl:items-end gap-4 justify-between">
-        <div>
-          <h2 class="text-lg font-extrabold">תקופת הדוח</h2>
-          <p class="text-sm text-slate-500">ברירת המחדל היא 3 חודשים אחורה ועד היום.</p>
-        </div>
-        <div class="flex flex-wrap items-end gap-2">
-          <label class="text-sm font-bold">מתאריך<input id="start-date" type="date" class="block mt-1 px-3 py-2 border rounded-lg bg-white"></label>
-          <label class="text-sm font-bold">עד תאריך<input id="end-date" type="date" class="block mt-1 px-3 py-2 border rounded-lg bg-white"></label>
-          <button data-months="3" class="preset active px-3 py-2 rounded-lg bg-indigo-600 text-white font-bold text-sm">3 חודשים</button>
-          <button data-days="7" class="preset px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-sm">7 ימים</button>
-          <button data-month="current" class="preset px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-sm">חודש נוכחי</button>
-          <button data-months="6" class="preset px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-sm">6 חודשים</button>
-          <button id="load-report" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm"><i class="fa-solid fa-rotate"></i> הצג נתונים</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-      <div class="bg-white rounded-xl border p-4"><p class="text-xs text-slate-500">מספר חיובים</p><p id="summary-entries" class="text-2xl font-extrabold mt-1">0</p></div>
-      <div class="bg-white rounded-xl border p-4"><p class="text-xs text-slate-500">סה"כ כמות</p><p id="summary-quantity" class="text-2xl font-extrabold mt-1">0</p></div>
-      <div class="bg-white rounded-xl border p-4"><p class="text-xs text-slate-500">חיובים רגילים</p><p id="summary-regular" class="text-2xl font-extrabold mt-1 text-indigo-700">0 ₪</p></div>
-      <div class="bg-white rounded-xl border p-4"><p class="text-xs text-slate-500">אקסטרה</p><p id="summary-extra" class="text-2xl font-extrabold mt-1 text-orange-600">0 ₪</p></div>
-      <div class="bg-slate-900 text-white rounded-xl border border-slate-900 p-4 col-span-2 lg:col-span-1"><p class="text-xs text-slate-300">סה"כ לתקופה</p><p id="summary-total" class="text-2xl font-extrabold mt-1">0 ₪</p></div>
-    </section>
-
-    <section class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      <div class="p-4 border-b bg-slate-50 flex flex-col sm:flex-row gap-3 justify-between items-center">
-        <div class="font-bold"><span id="period-label">טוען...</span> <span id="row-count" class="text-xs text-slate-500"></span></div>
-        <input id="table-search" type="search" placeholder="חיפוש לפי מוצר או תאריך..." class="w-full sm:w-80 px-3 py-2 border rounded-lg bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-      </div>
-      <div class="overflow-auto max-h-[calc(100vh-330px)]">
-        <table class="min-w-full text-sm">
-          <thead class="sticky-head bg-slate-100">
-            <tr>
-              <th class="px-4 py-3 text-right font-bold">תאריך</th>
-              <th class="px-4 py-3 text-right font-bold">מוצר</th>
-              <th class="px-4 py-3 text-center font-bold">סוג</th>
-              <th class="px-4 py-3 text-center font-bold">כמות</th>
-              <th class="px-4 py-3 text-center font-bold">מחיר יחידה</th>
-              <th class="px-4 py-3 text-center font-bold">סה"כ</th>
-            </tr>
-          </thead>
-          <tbody id="report-body" class="divide-y divide-slate-100"></tbody>
-        </table>
-      </div>
-      <div id="empty-state" class="hidden p-12 text-center text-slate-500"><i class="fa-regular fa-folder-open text-3xl mb-3"></i><p class="font-bold">אין חיובים בתקופה שנבחרה</p></div>
-    </section>
   </main>
 
 <script>
-const $ = id => document.getElementById(id);
-let rows = [];
-function iso(d) { return d.toISOString().slice(0,10); }
-function money(v) { return new Intl.NumberFormat('he-IL',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0) + ' ₪'; }
-function fmtDate(v) { const [y,m,d]=v.split('-'); return `${d}/${m}/${y}`; }
-function monthsAgo(months) { const d=new Date(); d.setHours(0,0,0,0); d.setMonth(d.getMonth()-months); return iso(d); }
-function setPreset(btn) { document.querySelectorAll('.preset').forEach(x=>x.classList.remove('active','bg-indigo-600','text-white')); btn.classList.add('active','bg-indigo-600','text-white'); }
-async function loadReport() {
-  const start=$('start-date').value, end=$('end-date').value;
-  if (!start || !end) return;
-  const btn=$('load-report'); btn.disabled=true; btn.textContent='טוען...';
-  try {
-    const res=await fetch(`/api/report/range?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`);
-    const data=await res.json();
-    if (!res.ok) throw new Error(data.error || 'שגיאה בטעינת הדוח');
-    rows=data.rows || [];
-    $('summary-entries').textContent=data.summary.entries.toLocaleString('he-IL');
-    $('summary-quantity').textContent=Number(data.summary.quantity||0).toLocaleString('he-IL',{maximumFractionDigits:2});
-    $('summary-regular').textContent=money(data.summary.regular_total);
-    $('summary-extra').textContent=money(data.summary.extra_total);
-    $('summary-total').textContent=money(data.summary.grand_total);
-    $('period-label').textContent=`${fmtDate(start)} — ${fmtDate(end)}`;
-    renderTable();
-  } catch(e) { alert(e.message); }
-  finally { btn.disabled=false; btn.innerHTML='<i class="fa-solid fa-rotate"></i> הצג נתונים'; }
-}
-function renderTable() {
-  const q=$('table-search').value.trim().toLowerCase();
-  const visible=rows.filter(r => `${r.date} ${r.product_name}`.toLowerCase().includes(q));
-  $('row-count').textContent=`(${visible.length.toLocaleString('he-IL')} שורות)`;
-  $('empty-state').classList.toggle('hidden', visible.length !== 0);
-  $('report-body').innerHTML=visible.map(r=>`<tr class="hover:bg-slate-50 ${r.is_extra?'bg-orange-50/30':''}"><td class="px-4 py-3 font-medium whitespace-nowrap">${fmtDate(r.date)}</td><td class="px-4 py-3 font-semibold">${escapeHtml(r.product_name)}</td><td class="px-4 py-3 text-center">${r.is_extra?'<span class="px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">אקסטרה</span>':'<span class="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">רגיל</span>'}</td><td class="px-4 py-3 text-center number">${Number(r.quantity).toLocaleString('he-IL',{maximumFractionDigits:2})}</td><td class="px-4 py-3 text-center number">${money(r.unit_price)}</td><td class="px-4 py-3 text-center font-extrabold number">${money(r.total)}</td></tr>`).join('');
-}
-function escapeHtml(v) { return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
-$('load-report').addEventListener('click',loadReport);
-$('table-search').addEventListener('input',renderTable);
-document.querySelectorAll('.preset').forEach(btn=>btn.addEventListener('click',()=>{
-  setPreset(btn); const now=new Date(); $('end-date').value=iso(now);
-  if(btn.dataset.months) $('start-date').value=monthsAgo(Number(btn.dataset.months));
-  else if(btn.dataset.days) { const d=new Date(); d.setDate(d.getDate()-Number(btn.dataset.days)); $('start-date').value=iso(d); }
-  else if(btn.dataset.month==='current') { $('start-date').value=iso(new Date(now.getFullYear(),now.getMonth(),1)); }
-  loadReport();
-}));
-const today=new Date(); $('end-date').value=iso(today); $('start-date').value=monthsAgo(3); loadReport();
+const $=id=>document.getElementById(id);let rows=[];let products=[];
+function iso(d){return d.toISOString().slice(0,10)}
+function money(v){return new Intl.NumberFormat('he-IL',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0)+' ₪'}
+function fmtDate(v){const [y,m,d]=v.split('-');return `${d}/${m}/${y}`}
+function monthsAgo(months){const d=new Date();d.setHours(0,0,0,0);d.setMonth(d.getMonth()-months);return iso(d)}
+function setPreset(btn){document.querySelectorAll('.preset').forEach(x=>x.classList.remove('active','bg-indigo-600','text-white'));btn.classList.add('active','bg-indigo-600','text-white')}
+async function loadReport(){const start=$('start-date').value,end=$('end-date').value;if(!start||!end)return;const btn=$('load-report');btn.disabled=true;btn.textContent='טוען...';try{const res=await fetch(`/api/report/range?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`);const data=await res.json();if(!res.ok)throw new Error(data.error||'שגיאה בטעינת הדוח');rows=data.rows||[];$('summary-entries').textContent=Number(data.summary.entries||0).toLocaleString('he-IL');$('summary-quantity').textContent=Number(data.summary.quantity||0).toLocaleString('he-IL',{maximumFractionDigits:2});$('summary-regular').textContent=money(data.summary.regular_total);$('summary-extra').textContent=money(data.summary.extra_total);$('summary-total').textContent=money(data.summary.grand_total);$('period-label').textContent=`${fmtDate(start)} — ${fmtDate(end)}`;renderTable()}catch(e){console.error(e);alert(e.message)}finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-rotate"></i> הצג נתונים'}}
+function renderTable(){const q=$('table-search').value.trim().toLowerCase();const visible=rows.filter(r=>`${r.date} ${r.product_name}`.toLowerCase().includes(q));$('row-count').textContent=`(${visible.length.toLocaleString('he-IL')} שורות)`;$('empty-state').classList.toggle('hidden',visible.length!==0);$('report-body').innerHTML=visible.map(r=>`<tr class="hover:bg-slate-50 ${r.is_extra?'bg-orange-50/30':''}"><td class="px-4 py-3 font-medium whitespace-nowrap">${fmtDate(r.date)}</td><td class="px-4 py-3 font-semibold">${escapeHtml(r.product_name)}</td><td class="px-4 py-3 text-center">${r.is_extra?'<span class="px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">אקסטרה</span>':'<span class="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold">רגיל</span>'}</td><td class="px-4 py-3 text-center number">${Number(r.quantity).toLocaleString('he-IL',{maximumFractionDigits:2})}</td><td class="px-4 py-3 text-center number">${money(r.unit_price)}</td><td class="px-4 py-3 text-center font-extrabold number">${money(r.total)}</td></tr>`).join('')}
+function renderProducts(){const q=$('product-search').value.trim().toLowerCase();const visible=products.filter(p=>p.name.toLowerCase().includes(q));$('product-count').textContent=`${products.length.toLocaleString('he-IL')} מוצרים`;$('product-body').innerHTML=visible.map(p=>`<tr class="hover:bg-slate-50"><td class="px-3 py-3 font-bold">${escapeHtml(p.name)}</td><td class="px-3 py-3 text-center font-extrabold number">${money(p.price)}</td><td class="px-3 py-3 text-center"><a href="/daily#price-list" title="עריכת מחירון" class="inline-flex w-7 h-7 items-center justify-center rounded-md border border-indigo-200 text-indigo-600 hover:bg-indigo-50"><i class="fa-solid fa-pen text-xs"></i></a></td></tr>`).join('')}
+async function loadProducts(){try{const res=await fetch('/api/report/products');const data=await res.json();if(!res.ok)throw new Error(data.error||'שגיאה בטעינת המחירון');products=data.products||[];renderProducts()}catch(e){console.error(e);$('product-count').textContent='לא ניתן לטעון מחירון'}}
+function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+$('load-report').addEventListener('click',loadReport);$('table-search').addEventListener('input',renderTable);$('product-search').addEventListener('input',renderProducts);
+document.querySelectorAll('.preset').forEach(btn=>btn.addEventListener('click',()=>{setPreset(btn);const now=new Date();$('end-date').value=iso(now);if(btn.dataset.months)$('start-date').value=monthsAgo(Number(btn.dataset.months));else if(btn.dataset.days){const d=new Date();d.setDate(d.getDate()-Number(btn.dataset.days));$('start-date').value=iso(d)}else if(btn.dataset.month==='current')$('start-date').value=iso(new Date(now.getFullYear(),now.getMonth(),1));loadReport()}));
+const today=new Date();$('end-date').value=iso(today);$('start-date').value=monthsAgo(3);loadReport();loadProducts();
 </script>
 </body>
 </html>
