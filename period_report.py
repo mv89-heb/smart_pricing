@@ -44,11 +44,11 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
     @app.get('/products/new')
     def product_add_page(): return render_template('product_add.html')
 
+    @app.get('/dashboard')
+    def dashboard_page(): return render_template('dashboard.html')
+
     @app.get('/period-report')
     def period_report_page(): return render_template('period_report.html')
-
-    @app.get('/daily')
-    def daily_entry_page(): return render_template('index.html')
 
     existing_index=app.view_functions.get('index')
     if existing_index is not None: app.view_functions['legacy_daily_index']=existing_index
