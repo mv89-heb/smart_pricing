@@ -7,7 +7,7 @@ from price_sync import register_price_sync
 with app.app_context():
     ensure_indexes(db)
 
-register_period_report(app, db, DailyEntry)
+register_period_report(app, db, DailyEntry, Product)
 register_price_sync(app, db, Product, DailyEntry, is_viewer)
 
 # Presentation-only navigation injection. It adds two static assets to HTML
