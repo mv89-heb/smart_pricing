@@ -1,0 +1,38 @@
+/* Production responsive layout: comfortable desktop + touch-first mobile. */
+:root { --app-max: 1480px; }
+@media (min-width: 1024px) {
+  main.max-w-7xl { max-width: var(--app-max); }
+  #right-panel > div { min-width: 0; }
+  #left-panel, #right-panel { min-width: 0; }
+  #right-panel > div { height: calc(100vh - 148px) !important; }
+  #left-panel > div:last-child { min-height: 620px; }
+  #entry-form { grid-template-columns: minmax(240px, 4fr) minmax(100px, 1.5fr) minmax(180px, 3fr) minmax(90px, 1fr) minmax(130px, 1.5fr); }
+  #entry-form > div { min-width: 0; }
+  #entry-prod-select-ui { min-width: 0; }
+  .ts-wrapper { width: 100%; min-width: 0; }
+  .ts-control { min-height: 38px; }
+  #price-list-table-body td { vertical-align: middle; }
+}
+@media (min-width: 1280px) {
+  main.max-w-7xl { padding-left: 1.5rem; padding-right: 1.5rem; }
+}
+@media (max-width: 1023px) {
+  #right-panel { order: 2; }
+  #left-panel { order: 1; }
+  #right-panel > div { height: auto !important; position: static !important; }
+}
+@media (max-width: 767px) {
+  #ux-shell-nav { top: 64px !important; }
+  #entry-form { grid-template-columns: 1fr !important; }
+  #entry-form > div { grid-column: 1 / -1 !important; }
+  #entry-form-container { padding: .875rem !important; }
+  #entry-submit-btn { min-height: 46px; }
+  #entry-qty, #entry-note, #entry-prod-select-ui { min-height: 44px; }
+  #right-panel > div { border-radius: 1rem; }
+  #price-list-table-body td { padding-top: .7rem; padding-bottom: .7rem; }
+  #price-list-table-body td:last-child { white-space: nowrap; }
+  #entries-table-body td { padding-top: .7rem; padding-bottom: .7rem; }
+  .mobile-product-option { -webkit-tap-highlight-color: transparent; }
+}
+/* Prevent injected nav and content from creating horizontal page overflow. */
+html, body { max-width: 100%; overflow-x: hidden; }
