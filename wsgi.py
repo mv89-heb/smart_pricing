@@ -1,16 +1,17 @@
-from app import app, db, DailyEntry
+from app import app, db, DailyEntry, Product, is_viewer
 from performance import ensure_indexes
 from period_report import register_period_report
+from price_sync import register_price_sync
 
 # One-time, idempotent startup optimization for the existing schema.
 with app.app_context():
     ensure_indexes(db)
 
 register_period_report(app, db, DailyEntry)
+register_price_sync(app, db, Product, DailyEntry, is_viewer)
 
 # Presentation-only navigation injection. It adds two static assets to HTML
-# responses without reading or rewriting the response body, so it has minimal
-# impact on data/API performance and leaves application logic untouched.
+# responses and does not change API/data responses.
 @app.after_request
 def add_global_navigation(response):
     content_type = response.headers.get('Content-Type', '')
