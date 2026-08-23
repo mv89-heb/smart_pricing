@@ -47,36 +47,43 @@ def _ensure_password_hash(value):
     return value if _looks_hashed(value) else generate_password_hash(value)
 
 
-def _create_all_without_existing_indexes():
-    """Create missing schema objects without re-issuing existing indexes.
+def _create_all_idempotent():
+    """Create tables first, then create indexes with PostgreSQL-safe IF NOT EXISTS.
 
-    PostgreSQL can report an existing index even when SQLAlchemy's metadata
-    table check causes create_all() to revisit the table. Temporarily removing
-    already-present Index objects from the metadata makes bootstrap safely
-    idempotent without dropping or replacing production indexes.
+    ``MetaData.create_all()`` is table-aware but index creation can still race with
+    an already-existing PostgreSQL relation (especially after a partial deploy or
+    legacy migration). We therefore remove Index objects temporarily, create the
+    tables/constraints, restore the metadata, and explicitly create each index with
+    ``IF NOT EXISTS``. This is safe on PostgreSQL and SQLite and is idempotent.
     """
-    inspector = inspect(db.engine)
-    existing_by_table = {
-        table: {item["name"] for item in inspector.get_indexes(table)}
-        for table in inspector.get_table_names()
-    }
-    skipped = []
+    indexes = []
     for table in db.metadata.tables.values():
-        existing = existing_by_table.get(table.name, set())
         for index in list(table.indexes):
-            if index.name in existing:
-                table.indexes.remove(index)
-                skipped.append((table, index))
+            indexes.append(index)
+            table.indexes.remove(index)
+
     try:
         db.create_all()
     finally:
-        for table, index in skipped:
-            table.indexes.add(index)
+        for index in indexes:
+            index.table.indexes.add(index)
+
+    for index in indexes:
+        table_name = index.table.name
+        index_name = index.name
+        columns = ", ".join(f'"{column.name}"' for column in index.columns)
+        unique = "UNIQUE " if index.unique else ""
+        db.session.execute(
+            text(
+                f'CREATE {unique}INDEX IF NOT EXISTS "{index_name}" '
+                f'ON "{table_name}" ({columns})'
+            )
+        )
 
 
 def bootstrap():
     _normalize_legacy_table_names()
-    _create_all_without_existing_indexes()
+    _create_all_idempotent()
     _migrate_legacy_data()
     _ensure_default_tenant_and_admin()
     _repair_unhashed_users()
