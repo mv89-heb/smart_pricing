@@ -5,8 +5,8 @@ def register_price_sync(app, db, Product, DailyEntry, is_viewer):
     """Keep Product.price as the current source of truth.
 
     DailyEntry.unit_price is a historical snapshot. Changing the current
-    product price therefore affects future charges, while historical reports
-    remain financially stable. Missing legacy snapshots are backfilled safely.
+    product price affects new charges and edited charges, while already
+    finalized historical rows keep their original financial value.
     """
 
     def reconcile_missing_snapshots():
@@ -39,16 +39,26 @@ def register_price_sync(app, db, Product, DailyEntry, is_viewer):
 
         data = request.get_json(silent=True) or {}
         product_name = (data.get('product_name') or '').strip()
-        if request.endpoint == 'update_entry' and not product_name:
+        entry = None
+        if request.endpoint == 'update_entry':
             entry_id = request.view_args.get('entry_id') if request.view_args else None
             entry = db.session.get(DailyEntry, entry_id) if entry_id else None
-            product_name = entry.product_name if entry else ''
+            if not product_name and entry:
+                product_name = entry.product_name
 
-        if product_name and not Product.query.filter_by(name=product_name).first():
+        product = Product.query.filter_by(name=product_name).first() if product_name else None
+        if not product:
+            if request.endpoint == 'update_entry' and entry is None:
+                return None
             return jsonify({
                 'success': False,
                 'error': f'המוצר "{product_name}" אינו קיים במחירון. יש להוסיף אותו למחירון לפני החיוב.'
             }), 400
+
+        # Editing a charge explicitly means recalculating it against the
+        # current price list. New charges already use Product.price in app.py.
+        if request.endpoint == 'update_entry' and entry:
+            entry.unit_price = product.price
         return None
 
     @app.get('/api/price-sync/status')
