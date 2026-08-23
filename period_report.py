@@ -2,7 +2,7 @@ from datetime import datetime
 from flask import render_template, request, jsonify
 
 
-def register_period_report(app, db, DailyEntry):
+def register_period_report(app, db, DailyEntry, Product=None):
     """Register the period-report UI/API without changing existing entry routes."""
 
     @app.get('/api/report/range')
@@ -21,7 +21,7 @@ def register_period_report(app, db, DailyEntry):
 
         entries = (
             DailyEntry.query
-            .filter(DailyEntry.date >= start_date, DailyEntry.date <= end_date)
+            .filter(DailyEntry.date >= start, DailyEntry.date <= end)
             .order_by(DailyEntry.date.desc(), DailyEntry.product_name.asc(), DailyEntry.id.asc())
             .all()
         )
@@ -32,8 +32,8 @@ def register_period_report(app, db, DailyEntry):
         extra_total = 0.0
         total_quantity = 0.0
         for entry in entries:
-            unit_price = entry.unit_price if entry.unit_price is not None else 0.0
-            line_total = float(unit_price) * float(entry.quantity)
+            unit_price = float(entry.unit_price or 0)
+            line_total = unit_price * float(entry.quantity)
             grand_total += line_total
             total_quantity += float(entry.quantity)
             if entry.is_extra:
@@ -42,7 +42,7 @@ def register_period_report(app, db, DailyEntry):
                 regular_total += line_total
             rows.append({
                 'id': entry.id,
-                'date': entry.date,
+                'date': entry.date.isoformat() if hasattr(entry.date, 'isoformat') else str(entry.date),
                 'product_name': entry.product_name,
                 'quantity': entry.quantity,
                 'is_extra': bool(entry.is_extra),
@@ -63,19 +63,36 @@ def register_period_report(app, db, DailyEntry):
             },
         })
 
+    @app.get('/api/report/products')
+    def get_report_products():
+        """Fast read-only price-list endpoint used by the period-report screen."""
+        if Product is None:
+            return jsonify({'products': []})
+        products = Product.query.order_by(Product.name.asc()).all()
+        return jsonify({
+            'products': [
+                {
+                    'name': p.name,
+                    'price': float(p.price or 0),
+                    'updated_at': (
+                        p.updated_at.isoformat(timespec='minutes')
+                        if getattr(p, 'updated_at', None) else None
+                    ),
+                }
+                for p in products
+            ],
+            'count': len(products),
+        })
+
     @app.get('/period-report')
     def period_report_page():
         return render_template('period_report.html')
 
-    # Keep the existing full daily-entry UI available without changing its code.
     @app.get('/daily')
     def daily_entry_page():
         return render_template('index.html')
 
-    # The existing root view remains the daily UI in app.py; wsgi swaps only
-    # the view function so the new period report becomes the landing screen.
     existing_index = app.view_functions.get('index')
     if existing_index is not None:
         app.view_functions['legacy_daily_index'] = existing_index
-
     app.view_functions['index'] = period_report_page
