@@ -44,8 +44,7 @@ def _run_startup_migration():
         try:
             session.execute(text("SET lock_timeout = '5s'"))
             session.execute(
-                text("SET statement_timeout = :timeout_ms"),
-                {"timeout_ms": statement_timeout_ms},
+                text(f"SET statement_timeout = '{statement_timeout_ms}ms'")
             )
             session.execute(text("SET idle_in_transaction_session_timeout = '15s'"))
 
