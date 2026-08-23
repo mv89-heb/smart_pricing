@@ -25,9 +25,6 @@ def _rename_if_legacy(name, required):
 
 
 def _normalize_legacy_table_names():
-    # The rebuild introduced a plural products table. Older releases could
-    # already have a products/product table with the old schema. Never query
-    # that table as the new schema until it has been moved aside.
     if _table_exists("products") and not {"tenant_id", "name", "current_price"}.issubset(_columns("products")):
         if not _table_exists("legacy_v1_products"):
             db.session.execute(text('ALTER TABLE "products" RENAME TO "legacy_v1_products"'))
@@ -50,9 +47,36 @@ def _ensure_password_hash(value):
     return value if _looks_hashed(value) else generate_password_hash(value)
 
 
+def _create_all_without_existing_indexes():
+    """Create missing schema objects without re-issuing existing indexes.
+
+    PostgreSQL can report an existing index even when SQLAlchemy's metadata
+    table check causes create_all() to revisit the table. Temporarily removing
+    already-present Index objects from the metadata makes bootstrap safely
+    idempotent without dropping or replacing production indexes.
+    """
+    inspector = inspect(db.engine)
+    existing_by_table = {
+        table: {item["name"] for item in inspector.get_indexes(table)}
+        for table in inspector.get_table_names()
+    }
+    skipped = []
+    for table in db.metadata.tables.values():
+        existing = existing_by_table.get(table.name, set())
+        for index in list(table.indexes):
+            if index.name in existing:
+                table.indexes.remove(index)
+                skipped.append((table, index))
+    try:
+        db.create_all()
+    finally:
+        for table, index in skipped:
+            table.indexes.add(index)
+
+
 def bootstrap():
     _normalize_legacy_table_names()
-    db.create_all()
+    _create_all_without_existing_indexes()
     _migrate_legacy_data()
     _ensure_default_tenant_and_admin()
     _repair_unhashed_users()
