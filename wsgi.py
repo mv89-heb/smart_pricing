@@ -12,9 +12,14 @@ register_price_sync(app, db, Product, DailyEntry, is_viewer)
 @app.after_request
 def add_global_navigation(response):
     content_type=response.headers.get('Content-Type','')
-    if 'text/html' in content_type and response.status_code<400:
-        response.headers['Link']='</static/navigation.css>; rel=preload; as=style, </static/navigation.js>; rel=preload; as=script'
-        response.set_data(response.get_data(as_text=True).replace('</head>','<link rel="stylesheet" href="/static/navigation.css"></head>',1).replace('</body>','<script src="/static/navigation.js" defer></script></body>',1))
+    if 'text/html' in content_type and response.status_code < 400:
+        response.headers['Link']='</static/navigation.css>; rel=preload; as=style, </static/ux-refresh.css>; rel=preload; as=style, </static/navigation.js>; rel=preload; as=script'
+        html=response.get_data(as_text=True)
+        if 'navigation.css' not in html:
+            html=html.replace('</head>','<link rel="stylesheet" href="/static/navigation.css"><link rel="stylesheet" href="/static/ux-refresh.css"></head>',1)
+        if 'navigation.js' not in html:
+            html=html.replace('</body>','<script src="/static/navigation.js" defer></script></body>',1)
+        response.set_data(html)
     return response
 
 __all__=['app']
