@@ -3,6 +3,7 @@ from sqlalchemy import text, func, case
 from sqlalchemy.orm import selectinload
 
 import app as app_module
+from restore_legacy_data import restore_if_needed
 
 app = app_module.app
 db = app_module.db
@@ -145,3 +146,10 @@ app.view_functions["get_period_report"]=_fast_period_report
 app.add_url_rule("/api/dashboard/summary","dashboard_summary_fast",_dashboard_summary,methods=["GET"])
 app.add_url_rule("/api/dashboard/compare","dashboard_compare_fast",_dashboard_compare,methods=["GET"])
 _install_indexes()
+
+# The current production app uses the original singular table names. Earlier
+# migrations preserved those rows as legacy_v1_* tables. Restore them into the
+# active tables after the schema is ready; the operation is set-based and
+# idempotent, and never deletes the preserved source rows.
+with app.app_context():
+    restore_if_needed(db)
