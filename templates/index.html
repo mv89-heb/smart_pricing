@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מערכת חכמה לניהול חיובי מכללה</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.default.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Heebo', 'sans-serif'] },
+                    colors: { primary: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' } }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        
+        .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+        .toast-exit { animation: slideOut 0.3s ease-in forwards; }
+        @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 0; } }
+        
+        .invoice-template { display: none; }
+        
+        @media print {
+            body:not(.invoice-mode) { background: white; }
+            body:not(.invoice-mode) .print\:hidden { display: none !important; }
+            body:not(.invoice-mode) .print\:w-full { width: 100% !important; grid-column: span 12 / span 12 !important; }
+            body:not(.invoice-mode) .print\:shadow-none { box-shadow: none !important; border: none !important; }
+
+            body.invoice-mode .app-ui { display: none !important; }
+            body.invoice-mode .invoice-template { display: block !important; }
+        }
+
+        .ts-control { border-radius: 0.5rem; padding: 0.6rem 0.75rem; border-color: #cbd5e1; }
+        .ts-control.focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <div class="app-ui flex flex-col min-h-screen w-full">
+        <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10 print:hidden">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="bg-primary-600 text-white p-2 rounded-lg shadow-md">
+                        <i class="fa-solid fa-chart-line text-xl"></i>
+                    </div>
+                    <h1 class="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                        ניהול חיובי מכללה
+                        <span id="user-badge" class="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-md font-normal">טוען משתמש...</span>
+                    </h1>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="admin-panel-btn" onclick="openAdminPanel()" class="hidden text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg flex items-center gap-2 transition-colors" title="הגדרות מנהל, משתמשים וגיבויים">
+                        <i class="fa-solid fa-gear text-slate-500"></i>
+                    </button>
+                    <button onclick="openDashboard()" class="text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
+                        <i class="fa-solid fa-chart-pie text-primary-500"></i> אנליטיקה ודאשבורד
+                    </button>
+                    <a href="/logout" class="text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors">
+                        <i class="fa-solid fa-right-from-bracket"></i> יציאה
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full transition-all duration-300">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+                <div id="right-panel" class="lg:col-span-4 flex flex-col gap-6 print:hidden transition-all duration-300">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-140px)] sticky top-24">
+                        
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-tags text-primary-500"></i> מחירון
+                            </h2>
+                            <button id="bulk-update-btn" onclick="bulkUpdatePrices()" class="text-xs font-bold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1" title="עדכון מחירון באחוזים">
+                                <i class="fa-solid fa-arrow-trend-up"></i> עדכון גורף
+                            </button>
+                        </div>
+
+                        <div class="p-5 flex-grow flex flex-col gap-5 overflow-hidden">
+                            <form id="product-form" class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <p id="product-form-title" class="text-xs font-bold text-slate-400">הוספת מוצר חדש</p>
+                                    <button type="button" id="product-cancel-edit-btn" onclick="cancelProductEdit()" class="hidden text-xs font-bold text-slate-400 hover:text-red-500 transition-colors">
+                                        <i class="fa-solid fa-xmark"></i> ביטול עריכה
+                                    </button>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-1">שם המוצר <span class="text-[10px] text-slate-400 font-normal">(מקף ייצר קטגוריה)</span></label>
+                                    <input type="text" id="prod-name" required class="block w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-1">מחיר יחידה (₪)</label>
+                                    <input type="number" id="prod-price" step="0.01" required class="block w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary-500">
+                                </div>
+                                <input type="hidden" id="prod-edit-original-name" value="">
+                                <button type="submit" id="product-submit-btn" class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 transition-all">
+                                    <i class="fa-solid fa-plus"></i> <span id="product-submit-btn-text">שמור למחירון</span>
+                                </button>
+                            </form>
+
+                            <div class="flex-grow overflow-y-auto border border-slate-200 rounded-xl">
+                                <table class="min-w-full divide-y divide-slate-200">
+                                    <thead class="bg-slate-50 sticky top-0 z-10">
+                                        <tr>
+                                            <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500">מוצר</th>
+                                            <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500">מחיר</th>
+                                            <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500" colspan="2"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="price-list-table-body" class="bg-white divide-y divide-slate-200"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="left-panel" class="lg:col-span-8 print:w-full flex flex-col gap-6 print:gap-2 transition-all duration-300">
+                    
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-r-4 border-r-primary-500 print:shadow-none print:p-0 print:border-r-0">
+                        <div class="flex items-center gap-3">
+                            <h2 class="text-xl font-bold text-slate-800">דו"ח חיובים יומי</h2>
+                            <button onclick="toggleFocusMode()" class="text-slate-400 hover:text-primary-600 transition-colors print:hidden" title="מצב מסך רחב להזנה מהירה">
+                                <i class="fa-solid fa-expand"></i>
+                            </button>
+                            <p class="hidden print:block text-slate-500 font-bold text-lg mt-1" id="print-date-display"></p>
+                        </div>
+                        
+                        <div class="flex items-center gap-2 print:hidden flex-row-reverse sm:flex-row">
+                            <input type="date" id="current-date" onchange="loadEntriesForDate()" class="block w-full sm:w-40 px-3 py-2 border-2 border-primary-100 rounded-xl font-bold text-primary-700 bg-primary-50 outline-none cursor-pointer">
+                            
+                            <button onclick="openTemplatesModal()" class="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors" title="סלים ותבניות">
+                                <i class="fa-solid fa-layer-group"></i> <span class="hidden sm:inline">תבניות</span>
+                            </button>
+                            <button onclick="copyFromYesterday()" class="bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors" title="העתק מאתמול">
+                                <i class="fa-solid fa-copy"></i>
+                            </button>
+                            <button id="clear-day-btn" onclick="clearCurrentDay()" class="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors" title="נקה יום שלם">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex-grow flex flex-col print:shadow-none print:border-0">
+                        
+                        <div id="entry-form-container" class="p-6 border-b border-slate-100 bg-slate-50/50 print:hidden">
+                            
+                            <div id="quick-add-chips" class="flex flex-wrap items-center gap-2 mb-4 min-h-[24px]"></div>
+
+                            <form id="entry-form" class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
+                                <div class="sm:col-span-5 flex flex-col">
+                                    <label class="text-sm font-medium text-slate-700 mb-1">מוצר שנצרך</label>
+                                    <select id="entry-prod-select-ui" required class="w-full">
+                                        <option value="">בחר מוצר...</option>
+                                    </select>
+                                    <p id="live-preview-box" class="text-xs text-primary-600 font-bold mt-1 h-4 text-right pr-1"></p>
+                                </div>
+                                
+                                <div class="sm:col-span-2 flex flex-col">
+                                    <label class="text-sm font-medium text-slate-700 mb-1 text-center">כמות</label>
+                                    <input type="text" inputmode="text" id="entry-qty" value="1" required class="w-full py-2.5 px-3 border border-slate-300 rounded-lg outline-none text-center focus:ring-2 focus:ring-primary-500" placeholder="מספר/תרגיל" oninput="updateLivePreview()">
+                                </div>
+                                
+                                <div class="sm:col-span-3 flex flex-col justify-end h-full sm:pt-[24px]">
+                                    <label class="flex items-center justify-center gap-2 cursor-pointer text-sm font-bold text-orange-600 bg-orange-50 py-2.5 px-3 rounded-lg border border-orange-200 hover:bg-orange-100 transition-colors w-full h-[44px]">
+                                        <input type="checkbox" id="entry-is-extra" class="w-4 h-4 text-orange-600 rounded focus:ring-orange-500 cursor-pointer">
+                                        חיוב אקסטרה
+                                    </label>
+                                </div>
+
+                                <div class="sm:col-span-2 flex flex-col justify-end h-full sm:pt-[24px]">
+                                    <button type="submit" id="entry-submit-btn" class="w-full flex justify-center items-center gap-2 py-2 px-4 rounded-lg shadow-sm text-sm font-medium text-white bg-slate-800 hover:bg-slate-900 transition-all h-[44px]" title="Ctrl+Enter להוספה">
+                                        <i class="fa-solid fa-arrow-down"></i> הוסף
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="px-6 pt-4 pb-2 print:hidden bg-white">
+                            <div class="relative">
+                                <i class="fa-solid fa-magnifying-glass absolute right-3 top-3 text-slate-400"></i>
+                                <input type="text" id="live-search" onkeyup="filterTable()" placeholder="סנן חיובים (הקש / לחיפוש מהיר)..." class="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-400">
+                            </div>
+                        </div>
+
+                        <div class="flex-grow overflow-x-auto print:overflow-visible min-h-[200px]">
+                            <table class="min-w-full divide-y divide-slate-200">
+                                <thead class="bg-slate-50 print:bg-white">
+                                    <tr>
+                                        <th class="px-6 py-4 text-right text-sm font-semibold text-slate-600 print:text-black">שם המוצר</th>
+                                        <th class="px-6 py-4 text-center text-sm font-semibold text-slate-600 w-24 print:text-black">כמות</th>
+                                        <th class="px-6 py-4 text-center text-sm font-semibold text-slate-600 w-32 print:text-black">מחיר יחידה</th>
+                                        <th class="px-6 py-4 text-center text-sm font-semibold text-slate-600 w-32 print:text-black">סה"כ</th>
+                                        <th class="px-6 py-4 text-center text-sm font-semibold text-slate-600 w-16 print:hidden"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="entries-table-body" class="bg-white divide-y divide-slate-100 print:border-b"></tbody>
+                            </table>
+                        </div>
+
+                        <div class="bg-slate-800 text-white p-6 flex flex-col sm:flex-row items-center justify-between mt-auto print:bg-white print:text-black print:border-t-2 print:p-2 gap-4">
+                            <div class="flex items-center gap-3">
+                                <div>
+                                    <p class="text-slate-300 text-sm font-medium mb-1 print:text-slate-600">סה"כ חיובים לתאריך זה:</p>
+                                    <p class="text-3xl font-bold text-white print:text-black"><span id="daily-total">0.00</span> ₪</p>
+                                </div>
+                            </div>
+                            <div class="flex gap-3 print:hidden w-full sm:w-auto">
+                                <button onclick="shareWhatsApp()" class="flex-1 sm:flex-none bg-green-500 hover:bg-green-600 text-white border border-green-400 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
+                                    <i class="fa-brands fa-whatsapp text-lg"></i> שתף
+                                </button>
+                                <button onclick="window.print()" class="flex-1 sm:flex-none bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
+                                    <i class="fa-solid fa-print"></i> הדפס יומי
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="admin-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="admin-content">
+            <div class="bg-slate-800 p-4 flex justify-between items-center text-white shrink-0">
+                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-gear text-slate-300"></i> הגדרות מנהל ובקרה</h3>
+                <button onclick="closeAdminPanel()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            
+            <div class="bg-slate-100 border-b flex px-4 gap-2 shrink-0">
+                <button id="tab-logs-btn" onclick="switchAdminTab('logs')" class="px-4 py-3 border-b-2 border-primary-600 font-bold text-sm text-primary-600">יומן פעולות (Logs)</button>
+                <button id="tab-users-btn" onclick="switchAdminTab('users')" class="px-4 py-3 border-b-2 border-transparent font-bold text-sm text-slate-600 hover:text-slate-900">ניהול משתמשי צוות</button>
+            </div>
+
+            <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
+                
+                <div id="admin-tab-logs" class="space-y-6">
+                    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <div>
+                            <h4 class="font-bold text-slate-800">גיבוי נתוני ליבה (תבניות ומחירון)</h4>
+                            <p class="text-sm text-slate-500">שמור עותק מקומי של כל ההגדרות למקרה של מעבר שרת.</p>
+                        </div>
+                        <button onclick="downloadSystemBackup()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition-colors">
+                            <i class="fa-solid fa-cloud-arrow-down"></i> הורד קובץ גיבוי
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col h-80">
+                        <table class="min-w-full divide-y divide-slate-100 text-sm">
+                            <thead class="bg-slate-50 sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 w-32">זמן</th>
+                                    <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 w-32">משתמש</th>
+                                    <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500 w-32">סוג פעולה</th>
+                                    <th class="px-4 py-2 text-right text-xs font-semibold text-slate-500">פירוט</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-table-body" class="divide-y divide-slate-100 bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="admin-tab-users" class="hidden space-y-6">
+                    <form id="user-form" class="bg-white p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-4 items-end shadow-sm">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1">שם משתמש (באנגלית)</label>
+                            <input type="text" id="user-username" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500 bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1">סיסמה</label>
+                            <input type="text" id="user-password" required class="w-full px-3 py-2 border rounded-lg w-full text-sm outline-none focus:ring-2 focus:ring-primary-500 bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">רמת הרשאה</label>
+                            <select id="user-role" required class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500 bg-slate-50">
+                                <option value="viewer">Viewer (צפייה בלבד)</option>
+                                <option value="editor">Editor (הזנת חיובים ועריכה)</option>
+                                <option value="admin">Admin (ניהול מלא)</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="submit" class="flex-grow bg-primary-600 hover:bg-primary-700 text-white font-bold py-2 px-4 rounded-lg text-sm h-[38px] transition-colors">
+                                <i class="fa-solid fa-user-plus ml-1"></i> <span id="user-form-submit-text">שמור משתמש</span>
+                            </button>
+                            <button type="button" id="user-form-cancel-btn" onclick="cancelEditUser()" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 px-4 rounded-lg text-sm h-[38px] transition-colors">
+                                ביטול
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                        <table class="min-w-full divide-y divide-slate-200 text-sm">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">שם משתמש</th>
+                                    <th class="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">תפקיד</th>
+                                    <th class="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider w-24"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-table-body" class="bg-white divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div id="templates-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300" id="templates-content">
+            <div class="bg-indigo-600 p-5 flex justify-between items-center text-white">
+                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-layer-group"></i> ניהול סלים ותבניות</h3>
+                <button onclick="closeTemplatesModal()" class="text-indigo-200 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6">
+                <button onclick="saveCurrentDayAsTemplate()" class="w-full bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 py-3 rounded-xl font-bold mb-6 flex justify-center items-center gap-2 transition-colors">
+                    <i class="fa-solid fa-floppy-disk"></i> שמור את היום הנוכחי כתבנית
+                </button>
+                <h4 class="text-sm font-bold text-slate-500 mb-3 border-b pb-2">תבניות שמורות:</h4>
+                <div id="templates-list" class="space-y-2 max-h-48 overflow-y-auto"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dashboard-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 transition-opacity duration-300 print:hidden">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="dashboard-content">
+            <div class="bg-slate-800 p-5 flex justify-between items-center text-white shrink-0">
+                <h3 class="text-lg font-bold flex items-center gap-2"><i class="fa-solid fa-chart-pie text-primary-400"></i> אנליטיקה ודאשבורד לתקופה - <span id="dash-month-title"></span></h3>
+                <button onclick="closeDashboard()" class="text-slate-400 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-grow bg-slate-50">
+                <div class="bg-white border border-slate-200 rounded-xl p-4 mb-6 shadow-sm">
+                    <div class="flex justify-between items-end mb-2">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">תקציב יעד לתקופה (₪):</label>
+                            <input type="number" id="budget-input" placeholder="לדוג' 10000" oninput="updateBudgetProgress()" class="px-3 py-1 text-sm border rounded-lg w-32 focus:ring-2 focus:ring-primary-500 outline-none bg-slate-50">
+                        </div>
+                        <div class="text-left text-sm font-bold text-slate-700" id="budget-percentage-text">0% נוצלו</div>
+                    </div>
+                    <div class="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
+                        <div id="budget-progress-bar" class="bg-primary-500 h-full w-0 transition-all duration-500"></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div class="bg-primary-50 rounded-xl p-3 border border-primary-100">
+                                <p class="text-xs font-medium text-primary-600 mb-1">חיוב שוטף</p>
+                                <p class="text-xl font-bold text-primary-800"><span id="dash-regular-total">0</span> ₪</p>
+                            </div>
+                            <div class="bg-orange-50 rounded-xl p-3 border border-orange-100">
+                                <p class="text-xs font-medium text-orange-600 mb-1">חריגות אקסטרה</p>
+                                <p class="text-xl font-bold text-orange-800"><span id="dash-extra-total">0</span> ₪</p>
+                            </div>
+                        </div>
+                        <div class="flex-grow relative min-h-[150px]">
+                            <canvas id="dashboardChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                        <h4 class="text-sm font-bold text-slate-600 mb-4 text-center">פילוח הוצאות לפי קטגוריות</h4>
+                        <div class="flex-grow relative min-h-[200px]">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                        <div class="bg-slate-800 text-white rounded-xl p-4 mb-4 text-center">
+                            <p class="text-xs font-medium text-slate-300 mb-1">תחזית תקציב לסוף החודש הנוכחי</p>
+                            <p class="text-3xl font-extrabold text-white"><span id="dash-forecast">0</span> ₪</p>
+                        </div>
+                        <h4 class="text-sm font-bold text-slate-600 mb-2">5 המוצרים היקרים ביותר</h4>
+                        <div class="flex-grow relative min-h-[150px]">
+                            <canvas id="topProductsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-xl p-4 text-center shadow-sm">
+                    <p class="text-sm font-medium text-slate-500 mb-1">סה"כ לתשלום בפועל לתקופה המוצגת</p>
+                    <p class="text-4xl font-extrabold text-slate-800"><span id="dash-grand-total">0</span> ₪</p>
+                </div>
+            </div>
+            <div class="p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-3">
+                <div class="flex gap-4">
+                    <button onclick="exportMonthlyReport()" class="w-1/2 flex justify-center items-center gap-2 bg-green-600 text-white hover:bg-green-700 py-3 rounded-xl font-bold transition-colors">
+                        <i class="fa-solid fa-file-excel"></i> הורד דוח Excel מתקדם
+                    </button>
+                    <button onclick="generateFormalInvoice()" class="w-1/2 flex justify-center items-center gap-2 bg-slate-800 text-white hover:bg-slate-900 py-3 rounded-xl font-bold transition-colors">
+                        <i class="fa-solid fa-file-pdf"></i> הפק דרישת תשלום רשמית
+                    </button>
+                </div>
+                <button id="end-season-btn" onclick="endOfSeasonReset()" class="w-full flex justify-center items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 py-3 rounded-xl font-bold transition-colors mt-2">
+                    <i class="fa-solid fa-power-off"></i> סגירת תקופה ואיפוס מערכת לחלוטין (מחיקת כל החיובים)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="invoice-template p-10 max-w-2xl mx-auto">
+        <div class="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-8">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">דרישת תשלום רשמית</h1>
+                <p class="text-slate-500 text-sm mt-1">ניהול חיובי מכללה</p>
+            </div>
+            <div class="text-left">
+                <p class="text-sm text-slate-500">תאריך הפקה:</p>
+                <p class="font-bold text-slate-800" id="inv-date"></p>
+            </div>
+        </div>
+
+        <div class="mb-8">
+            <p class="text-sm text-slate-500 mb-1">עבור תקופה:</p>
+            <p class="text-xl font-bold text-slate-800" id="inv-month"></p>
+        </div>
+
+        <table class="w-full border-collapse mb-8">
+            <thead>
+                <tr class="border-b-2 border-slate-300">
+                    <th class="text-right py-3 text-sm font-bold text-slate-600">תיאור</th>
+                    <th class="text-left py-3 text-sm font-bold text-slate-600">סכום</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="border-b border-slate-200">
+                    <td class="py-3 text-slate-700">חיובים שוטפים</td>
+                    <td class="py-3 text-left font-medium text-slate-800" id="inv-reg"></td>
+                </tr>
+                <tr class="border-b border-slate-200">
+                    <td class="py-3 text-slate-700">חריגות אקסטרה</td>
+                    <td class="py-3 text-left font-medium text-slate-800" id="inv-ext"></td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr class="border-t-2 border-slate-800">
+                    <td class="py-4 text-lg font-bold text-slate-900">סה"כ לתשלום</td>
+                    <td class="py-4 text-left text-lg font-extrabold text-slate-900" id="inv-total"></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="border-t border-slate-200 pt-6 mt-12 text-center text-xs text-slate-400">
+            <p>מסמך זה הופק אוטומטית ממערכת ניהול חיובי מכללה ואינו מהווה חשבונית מס.</p>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none print:hidden"></div>
+
+    <script>
+        let products = {};
+        let ts; 
+        let dashboardChartInstance = null; 
+        let topProductsChartInstance = null;
+        let categoryChartInstance = null;
+        let currentGrandTotal = 0; 
+        let pendingDeletions = {}; 
+        let currentUserRole = 'viewer'; // תפקיד המשתמש הנוכחי
+
+        const today = new Date();
+        const dateStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+        document.getElementById('current-date').value = dateStr;
+
+        const savedBudget = localStorage.getItem('monthly_budget');
+        if (savedBudget) document.getElementById('budget-input').value = savedBudget;
+
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('entry-submit-btn').click();
+            }
+            if (e.key === '/' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
+                e.preventDefault();
+                document.getElementById('live-search').focus();
+            }
+        });
+
+        function formatMoney(amount) {
+            return amount.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // כלים בטוחים להזרקת טקסט/מאפיינים ל-HTML, כדי שמוצרים/שמות עם גרש, מרכאות
+        // או תווים מיוחדים לא ישברו כפתורים (זו הייתה סיבת "כפתורים שלא עובדים")
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function escapeAttr(str) { return escapeHtml(str); }
+
+        async function apiFetch(url, options = {}) {
+            try {
+                const res = await fetch(url, options);
+                if (res.status === 401) { window.location.href = '/login'; return null; }
+                return res;
+            } catch (err) {
+                showToast('שגיאת תקשורת', 'error'); return null;
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const icon = type === 'success' ? '<i class="fa-solid fa-circle-check text-green-500"></i>' : '<i class="fa-solid fa-triangle-exclamation text-red-500"></i>';
+            const bgColor = type === 'success' ? 'bg-white border-green-100' : 'bg-white border-red-100';
+            
+            toast.className = `toast-enter flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${bgColor} pointer-events-auto`;
+            toast.innerHTML = `${icon} <span class="font-medium text-sm text-slate-800">${message}</span>`;
+            
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.replace('toast-enter', 'toast-exit');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // פיצ'ר חדש: בדיקה והתאמת הממשק בהתאם להרשאות המשתמש המחובר
+        async function checkUserSession() {
+            const res = await apiFetch('/api/current_user');
+            if (res && res.ok) {
+                const info = await res.json();
+                currentUserRole = info.role;
+                document.getElementById('user-badge').textContent = `${info.username} (${translateRole(info.role)})`;
+                
+                // התאמת חשיפת אלמנטים
+                if (info.role === 'admin') {
+                    document.getElementById('admin-panel-btn').classList.remove('hidden');
+                }
+                if (info.role === 'viewer') {
+                    // לצופה נעלים לחלוטין את טופסי ההוספה ואת כפתורי המחיקה/איפוס הגורפים
+                    document.getElementById('product-form').classList.add('hidden');
+                    document.getElementById('entry-form-container').classList.add('hidden');
+                    document.getElementById('clear-day-btn').classList.add('hidden');
+                    document.getElementById('bulk-update-btn').classList.add('hidden');
+                    document.getElementById('end-season-btn').classList.add('hidden');
+                }
+            }
+        }
+
+        function translateRole(role) {
+            if (role === 'admin') return 'מנהל';
+            if (role === 'editor') return 'עורך';
+            return 'צפייה בלבד';
+        }
+
+        async function loadProducts() {
+            await checkUserSession(); // בודק הרשאות לפני טעינה
+            const res = await apiFetch('/api/products');
+            if (!res) return;
+            products = await res.json();
+            renderProducts();
+            loadEntriesForDate();
+            updateQuickAddChips(); 
+        }
+
+        function renderProducts() {
+            const tbody = document.getElementById('price-list-table-body');
+            const select = document.getElementById('entry-prod-select-ui');
+            
+            tbody.innerHTML = '';
+            if (ts) { ts.destroy(); ts = null; }
+            select.innerHTML = '<option value="">בחר מוצר...</option>';
+
+            const categories = {};
+            const oldPrices = JSON.parse(localStorage.getItem('saved_price_history') || '{}');
+
+            Object.keys(products).sort((a, b) => a.localeCompare(b, 'he')).forEach(name => {
+                let trendHtml = '';
+                if (oldPrices[name] && oldPrices[name] < products[name]) {
+                    trendHtml = '<i class="fa-solid fa-arrow-trend-up text-red-500 mr-2 text-[10px]" title="המחיר עלה"></i>';
+                } else if (oldPrices[name] && oldPrices[name] > products[name]) {
+                    trendHtml = '<i class="fa-solid fa-arrow-trend-down text-green-500 mr-2 text-[10px]" title="המחיר הוזל"></i>';
+                }
+
+                // הסתרת כפתורי עריכה/מחיקה לצופים (data-attributes כדי לא לשבור על שמות עם גרש/מרכאות)
+                const editBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="edit-product-btn text-indigo-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity" data-name="${escapeAttr(name)}" title="עריכת מוצר"><i class="fa-solid fa-pen"></i></button>`;
+                const deleteBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-product-btn text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" data-name="${escapeAttr(name)}" title="מחיקת מוצר"><i class="fa-solid fa-trash-can"></i></button>`;
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 group">
+                        <td class="px-4 py-3 text-sm font-medium text-slate-800 text-right">${trendHtml}${escapeHtml(name)}</td>
+                        <td class="px-4 py-3 text-sm text-slate-600 text-center">${formatMoney(products[name])} ₪</td>
+                        <td class="px-4 py-3 text-center">${editBtnHtml}</td>
+                        <td class="px-4 py-3 text-center">${deleteBtnHtml}</td>
+                    </tr>`;
+                
+                let cat = 'כללי';
+                if (name.includes('-')) cat = name.split('-')[0].trim();
+                if (!categories[cat]) categories[cat] = [];
+                categories[cat].push(name);
+            });
+
+            localStorage.setItem('saved_price_history', JSON.stringify(products));
+
+            Object.keys(categories).sort((a, b) => a.localeCompare(b, 'he')).forEach(cat => {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = cat;
+                categories[cat].sort((a, b) => a.localeCompare(b, 'he')).forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name; opt.textContent = name; 
+                    optgroup.appendChild(opt);
+                });
+                select.appendChild(optgroup);
+            });
+
+            ts = new TomSelect("#entry-prod-select-ui", {
+                create: false,
+                sortField: { field: "text", direction: "asc" },
+                onChange: function() { updateLivePreview(); } 
+            });
+        }
+
+        function updateQuickAddChips() {
+            if (currentUserRole === 'viewer') return; // לא מציגים צ'יפים לצופה
+            const freq = JSON.parse(localStorage.getItem('prod_freq') || '{}');
+            const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            const container = document.getElementById('quick-add-chips');
+            
+            if(sorted.length === 0) { container.innerHTML = ''; return; }
+            
+            let html = '<span class="text-xs text-slate-400 font-bold ml-2"><i class="fa-solid fa-bolt text-yellow-400"></i> הוספה מהירה:</span>';
+            sorted.forEach(([name, count]) => {
+                if(products[name]) {
+                    html += `<button type="button" class="quick-add-chip-btn bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1 rounded-full text-xs font-bold transition-colors shadow-sm" data-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`;
+                }
+            });
+            container.innerHTML = html;
+        }
+
+        document.getElementById('quick-add-chips').addEventListener('click', (e) => {
+            const btn = e.target.closest('.quick-add-chip-btn');
+            if (btn) selectQuickAdd(btn.dataset.name);
+        });
+
+        function selectQuickAdd(name) {
+            if (ts) ts.setValue(name);
+            document.getElementById('entry-qty').focus();
+            updateLivePreview();
+        }
+
+        async function bulkUpdatePrices() {
+            if (Object.keys(products).length === 0) return showToast('המחירון ריק.', 'error');
+            const percentStr = prompt('הזן אחוז לעדכון גורף של כל המחירון (לדוגמה: 5, -5):');
+            if (!percentStr) return; 
+            const percent = parseFloat(percentStr);
+            if (isNaN(percent)) return showToast('נא להזין מספר תקין', 'error');
+            if (!confirm(`האם לעדכן את כל ${Object.keys(products).length} המוצרים ב-${percent}%?`)) return;
+
+            showToast('מעדכן מחירים...', 'success');
+            let successCount = 0;
+            
+            for (const [name, oldPrice] of Object.entries(products)) {
+                const newPrice = Math.round(oldPrice * (1 + (percent / 100)) * 100) / 100;
+                const res = await apiFetch('/api/products', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ name: name, price: newPrice }) 
+                });
+                if (res && res.ok) successCount++;
+            }
+            showToast(`עודכנו ${successCount} מוצרים!`);
+            loadProducts(); 
+        }
+
+        document.getElementById('product-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('product-submit-btn');
+            btn.disabled = true;
+            const name = document.getElementById('prod-name').value.trim();
+            const price = parseFloat(document.getElementById('prod-price').value);
+            const originalName = document.getElementById('prod-edit-original-name').value;
+            const isEditing = !!originalName;
+
+            let res;
+            if (isEditing) {
+                res = await apiFetch(`/api/products/${encodeURIComponent(originalName)}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name, price })
+                });
+            } else {
+                res = await apiFetch('/api/products', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name, price })
+                });
+            }
+            btn.disabled = false;
+
+            if (res && res.ok) {
+                cancelProductEdit();
+                showToast(isEditing ? `"${name}" עודכן בהצלחה!` : `"${name}" נשמר במחירון!`);
+                loadProducts();
+            } else if (res) {
+                const data = await res.json().catch(() => ({}));
+                showToast(data.error || 'שגיאה בשמירת המוצר', 'error');
+            }
+        });
+
+        function editProduct(name) {
+            document.getElementById('prod-name').value = name;
+            document.getElementById('prod-price').value = products[name] ?? '';
+            document.getElementById('prod-edit-original-name').value = name;
+            document.getElementById('product-form-title').textContent = `עריכת מוצר: ${name}`;
+            document.getElementById('product-cancel-edit-btn').classList.remove('hidden');
+            document.getElementById('product-submit-btn-text').textContent = 'עדכן מוצר';
+            document.getElementById('prod-name').focus();
+        }
+
+        function cancelProductEdit() {
+            document.getElementById('product-form').reset();
+            document.getElementById('prod-edit-original-name').value = '';
+            document.getElementById('product-form-title').textContent = 'הוספת מוצר חדש';
+            document.getElementById('product-cancel-edit-btn').classList.add('hidden');
+            document.getElementById('product-submit-btn-text').textContent = 'שמור למחירון';
+        }
+
+        async function deleteProduct(name) {
+            if(confirm(`למחוק את "${name}" מהמחירון?`)) {
+                const res = await apiFetch(`/api/products/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                if (res && res.ok) {
+                    if (document.getElementById('prod-edit-original-name').value === name) cancelProductEdit();
+                    showToast(`"${name}" נמחק!`);
+                    loadProducts();
+                }
+            }
+        }
+
+        // מאזין אירועים אחד לכל הטבלה (event delegation) - עמיד לשמות מוצרים עם
+        // גרשיים/מרכאות/תווים מיוחדים, בניגוד ל-onclick עם שרשור מחרוזות
+        document.getElementById('price-list-table-body').addEventListener('click', (e) => {
+            const editBtn = e.target.closest('.edit-product-btn');
+            if (editBtn) { editProduct(editBtn.dataset.name); return; }
+            const delBtn = e.target.closest('.delete-product-btn');
+            if (delBtn) { deleteProduct(delBtn.dataset.name); return; }
+        });
+
+        async function loadEntriesForDate() {
+            const date = document.getElementById('current-date').value;
+            if (!date) return;
+            
+            const dateParts = date.split('-');
+            document.getElementById('print-date-display').textContent = `תאריך: ${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+            document.getElementById('live-search').value = '';
+
+            const res = await apiFetch(`/api/entries/${date}`);
+            if (res) renderEntries(await res.json());
+        }
+
+        function renderEntries(entries) {
+            window.currentDayEntries = entries; 
+            const tbody = document.getElementById('entries-table-body');
+            tbody.innerHTML = '';
+            let total = 0;
+
+            entries.forEach(entry => {
+                // מחיר קפוא מזמן ההזנה (unit_price) עדיף על המחיר העדכני במחירון,
+                // כדי שדוחות ישנים לא ישתנו אם המוצר נמחק/עודכן במחירון אחר-כך
+                const price = (entry.unit_price !== undefined && entry.unit_price !== null) ? entry.unit_price : (products[entry.product_name] || 0);
+                const itemTotal = price * entry.quantity;
+                total += itemTotal;
+                
+                const extraTag = entry.is_extra ? `<span class="mr-2 text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold border border-orange-200">אקסטרה</span>` : '';
+                let actionsHtml = '';
+                if (currentUserRole !== 'viewer') {
+                    actionsHtml = `
+                        <button type="button" class="edit-entry-btn text-indigo-400 hover:text-indigo-600 transition-colors ml-3" data-id="${entry.id}" data-qty="${entry.quantity}" title="עריכת כמות"><i class="fa-solid fa-pen"></i></button>
+                        <button type="button" class="delete-entry-btn text-red-400 hover:text-red-600 transition-colors" data-id="${entry.id}" title="מחיקת חיוב"><i class="fa-solid fa-xmark text-lg"></i></button>`;
+                }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 ${entry.is_extra ? 'bg-orange-50/30' : ''} table-row-item">
+                        <td class="px-6 py-4 text-sm font-semibold text-slate-800 text-right print:text-black print:p-2 product-name-cell">${escapeHtml(entry.product_name)} ${extraTag}</td>
+                        <td class="px-6 py-4 text-sm text-slate-700 text-center font-medium print:text-black print:p-2">${entry.quantity}</td>
+                        <td class="px-6 py-4 text-sm text-slate-600 text-center print:text-black print:p-2">${formatMoney(price)} ₪</td>
+                        <td class="px-6 py-4 text-sm font-bold text-primary-700 text-center print:text-black print:p-2">${formatMoney(itemTotal)} ₪</td>
+                        <td class="px-6 py-4 text-center print:hidden whitespace-nowrap">${actionsHtml}</td>
+                    </tr>`;
+            });
+            document.getElementById('daily-total').textContent = formatMoney(total);
+        }
+
+        document.getElementById('entries-table-body').addEventListener('click', (e) => {
+            const editBtn = e.target.closest('.edit-entry-btn');
+            if (editBtn) { editEntryQuantity(parseInt(editBtn.dataset.id, 10), parseFloat(editBtn.dataset.qty)); return; }
+            const delBtn = e.target.closest('.delete-entry-btn');
+            if (delBtn) { deleteEntryWithUndo(parseInt(delBtn.dataset.id, 10), delBtn); return; }
+        });
+
+        async function editEntryQuantity(entryId, currentQty) {
+            const input = prompt('הזן כמות חדשה:', currentQty);
+            if (input === null) return;
+            const newQty = parseFloat(input);
+            if (isNaN(newQty) || newQty <= 0) return showToast('כמות לא תקינה', 'error');
+
+            const res = await apiFetch(`/api/entries/${entryId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ quantity: newQty })
+            });
+            if (res && res.ok) {
+                showToast('הכמות עודכנה בהצלחה!');
+                loadEntriesForDate();
+            } else if (res) {
+                const data = await res.json().catch(() => ({}));
+                showToast(data.error || 'שגיאה בעדכון הכמות', 'error');
+            }
+        }
+
+        function deleteEntryWithUndo(entryId, btnElement) {
+            const row = btnElement.closest('tr');
+            row.style.display = 'none'; 
+            
+            const container = document.getElementById('toast-container');
+            const toastId = 'toast-undo-' + Date.now();
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = `toast-enter flex items-center justify-between gap-4 px-4 py-3 rounded-lg shadow-lg border border-yellow-200 bg-yellow-50 pointer-events-auto w-80`;
+            toast.innerHTML = `
+                <div class="flex items-center gap-2 text-yellow-800">
+                    <i class="fa-solid fa-trash-arrow-up"></i>
+                    <span class="text-sm font-bold">החיוב הוסר.</span>
+                </div>
+                <button onclick="undoDelete(${entryId}, '${toastId}')" class="bg-yellow-200 hover:bg-yellow-300 text-yellow-800 px-3 py-1.5 rounded-md text-xs font-bold transition-colors">בטל</button>
+            `;
+            container.appendChild(toast);
+
+            pendingDeletions[entryId] = {
+                timeout: setTimeout(async () => {
+                    await apiFetch(`/api/entries/${entryId}`, { method: 'DELETE' });
+                    const t = document.getElementById(toastId);
+                    if(t) { t.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => t.remove(), 300); }
+                    delete pendingDeletions[entryId];
+                    loadEntriesForDate(); 
+                }, 5000),
+                row: row
+            };
+        }
+
+        function undoDelete(entryId, toastId) {
+            if(pendingDeletions[entryId]) {
+                clearTimeout(pendingDeletions[entryId].timeout); 
+                pendingDeletions[entryId].row.style.display = ''; 
+                delete pendingDeletions[entryId];
+            }
+            const t = document.getElementById(toastId);
+            if(t) { t.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => t.remove(), 300); }
+        }
+
+        function openTemplatesModal() {
+            renderTemplatesList();
+            const modal = document.getElementById('templates-modal');
+            const content = document.getElementById('templates-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function closeTemplatesModal() {
+            const modal = document.getElementById('templates-modal');
+            const content = document.getElementById('templates-content');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        function renderTemplatesList() {
+            const list = document.getElementById('templates-list');
+            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            list.innerHTML = '';
+            
+            if(Object.keys(templates).length === 0) {
+                list.innerHTML = '<p class="text-sm text-slate-400 text-center py-4">אין תבניות שמורות עדיין.</p>';
+                return;
+            }
+
+            Object.keys(templates).forEach(name => {
+                const itemsCount = templates[name].length;
+                
+                // הסתרת כפתור מחיקת תבנית לצופים (data-attributes כדי לא לשבור על שמות עם גרש)
+                const deleteActionHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="delete-template-btn text-red-400 hover:text-red-600 px-2 transition-colors" data-name="${escapeAttr(name)}"><i class="fa-solid fa-trash"></i></button>`;
+                const loadBtnHtml = currentUserRole === 'viewer' ? '' : `<button type="button" class="load-template-btn bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-xs font-bold transition-colors" data-name="${escapeAttr(name)}">טען סל</button>`;
+
+                list.innerHTML += `
+                    <div class="flex items-center justify-between bg-slate-50 border border-slate-200 p-3 rounded-lg">
+                        <div>
+                            <p class="font-bold text-sm text-slate-700">${escapeHtml(name)}</p>
+                            <p class="text-xs text-slate-500">${itemsCount} מוצרים בתבנית</p>
+                        </div>
+                        <div class="flex gap-2">
+                            ${loadBtnHtml}
+                            ${deleteActionHtml}
+                        </div>
+                    </div>`;
+            });
+        }
+
+        document.getElementById('templates-list').addEventListener('click', (e) => {
+            const loadBtn = e.target.closest('.load-template-btn');
+            if (loadBtn) { loadTemplate(loadBtn.dataset.name); return; }
+            const delBtn = e.target.closest('.delete-template-btn');
+            if (delBtn) { deleteTemplate(delBtn.dataset.name); return; }
+        });
+
+        async function saveCurrentDayAsTemplate() {
+            if (!window.currentDayEntries || window.currentDayEntries.length === 0) return showToast('אין חיובים לשמור ביום זה', 'error');
+            const name = prompt('הזן שם לתבנית החדשה:');
+            if (!name) return;
+
+            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            templates[name] = window.currentDayEntries.map(e => ({ product_name: e.product_name, quantity: e.quantity, is_extra: e.is_extra }));
+            localStorage.setItem('billing_templates', JSON.stringify(templates));
+            
+            showToast('התבנית נשמרה בהצלחה!');
+            renderTemplatesList();
+        }
+
+        async function loadTemplate(name) {
+            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            const items = templates[name];
+            if (!items) return;
+
+            const date = document.getElementById('current-date').value;
+            if(!confirm(`האם לטעון את תבנית "${name}" לתאריך הנוכחי?`)) return;
+
+            showToast('טוען תבנית למערכת...', 'success');
+            for (const item of items) {
+                await apiFetch('/api/entries', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ date, product_name: item.product_name, quantity: item.quantity, is_extra: item.is_extra })
+                });
+            }
+            showToast('התבנית נטענה במלואה!');
+            loadEntriesForDate();
+            closeTemplatesModal();
+        }
+
+        function deleteTemplate(name) {
+            if(!confirm(`למחוק את התבנית "${name}"?`)) return;
+            const templates = JSON.parse(localStorage.getItem('billing_templates') || '{}');
+            delete templates[name];
+            localStorage.setItem('billing_templates', JSON.stringify(templates));
+            renderTemplatesList();
+        }
+
+        function toggleFocusMode() {
+            const rightPanel = document.getElementById('right-panel');
+            const leftPanel = document.getElementById('left-panel');
+            if (rightPanel.classList.contains('hidden')) {
+                rightPanel.classList.remove('hidden');
+                leftPanel.classList.remove('lg:col-span-12');
+                leftPanel.classList.add('lg:col-span-8');
+            } else {
+                rightPanel.classList.add('hidden');
+                leftPanel.classList.remove('lg:col-span-8');
+                leftPanel.classList.add('lg:col-span-12');
+            }
+        }
+
+        function getEvaluatedQuantity() {
+            const qtyStr = document.getElementById('entry-qty').value;
+            try {
+                const qty = Function('"use strict";return (' + qtyStr + ')')();
+                if (isNaN(qty) || qty <= 0) return 0;
+                return qty;
+            } catch (e) {
+                return 0;
+            }
+        }
+
+        function updateLivePreview() {
+            const prodName = document.getElementById('entry-prod-select-ui').value;
+            const qty = getEvaluatedQuantity();
+            const previewBox = document.getElementById('live-preview-box');
+            
+            if (prodName && products[prodName] && qty > 0) {
+                const total = products[prodName] * qty;
+                previewBox.textContent = `= סה"כ ${formatMoney(total)} ₪`;
+            } else {
+                previewBox.textContent = '';
+            }
+        }
+
+        function shareWhatsApp() {
+            const dateStr = document.getElementById('print-date-display').textContent.replace('תאריך: ', '');
+            const total = document.getElementById('daily-total').textContent;
+            let msg = `*דוח חיובי מכללה יומי* 📊\nתאריך: ${dateStr}\n\nסה"כ הוצאות ליום זה: *${total} ₪*\n\n_הופק אוטומטית ממערכת הניהול_`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+
+        function filterTable() {
+            const input = document.getElementById('live-search').value.toLowerCase();
+            const rows = document.querySelectorAll('.table-row-item');
+            rows.forEach(row => {
+                const text = row.querySelector('.product-name-cell').textContent.toLowerCase();
+                if(text.includes(input)) row.style.display = '';
+                else row.style.display = 'none';
+            });
+        }
+
+        async function copyFromYesterday() {
+            const currentStr = document.getElementById('current-date').value;
+            if (!currentStr) return;
+            
+            const currentDate = new Date(currentStr);
+            const yesterday = new Date(currentDate);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+            const res = await apiFetch(`/api/entries/${yesterdayStr}`);
+            if (!res) return;
+            const entries = await res.json();
+            
+            if (entries.length === 0) return showToast('אין חיובים מאתמול להעתקה', 'error');
+            if(!confirm(`האם להעתיק ${entries.length} חיובים מתאריך האתמול?`)) return;
+
+            showToast('מעתיק נתונים...', 'success');
+            for (const entry of entries) {
+                await apiFetch('/api/entries', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        date: currentStr, product_name: entry.product_name, quantity: entry.quantity, is_extra: entry.is_extra
+                    })
+                });
+            }
+            showToast('הנתונים הועתקו בהצלחה!');
+            loadEntriesForDate();
+        }
+
+        async function clearCurrentDay() {
+            if (!window.currentDayEntries || window.currentDayEntries.length === 0) return showToast('אין חיובים למחוק ביום זה', 'error');
+            if(!confirm(`אזהרה! האם אתה בטוח שברצונך למחוק את כל ${window.currentDayEntries.length} החיובים ביום זה?`)) return;
+            
+            showToast('מוחק נתונים...', 'success');
+            for (const entry of window.currentDayEntries) {
+                await apiFetch(`/api/entries/${entry.id}`, { method: 'DELETE' });
+            }
+            showToast('היום נוקה בהצלחה!');
+            loadEntriesForDate();
+        }
+
+        document.getElementById('entry-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('entry-submit-btn');
+            
+            const date = document.getElementById('current-date').value;
+            const product_name = document.getElementById('entry-prod-select-ui').value;
+            const is_extra = document.getElementById('entry-is-extra').checked;
+            const quantity = getEvaluatedQuantity();
+
+            if (!product_name) return showToast('אנא בחר מוצר מתוך הרשימה', 'error');
+            if (quantity <= 0) return showToast('הכמות צריכה להיות מספר תקין או תרגיל', 'error');
+
+            btn.disabled = true;
+            const res = await apiFetch('/api/entries', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ date, product_name, quantity, is_extra })
+            });
+            btn.disabled = false;
+
+            if (res && res.ok) {
+                let freq = JSON.parse(localStorage.getItem('prod_freq') || '{}');
+                freq[product_name] = (freq[product_name] || 0) + 1;
+                localStorage.setItem('prod_freq', JSON.stringify(freq));
+                updateQuickAddChips(); 
+
+                document.getElementById('entry-qty').value = 1;
+                document.getElementById('entry-is-extra').checked = false;
+                document.getElementById('live-preview-box').textContent = '';
+                if (ts) ts.clear(); 
+                
+                showToast('החיוב התווסף בהצלחה!');
+                loadEntriesForDate();
+            }
+        });
+
+        async function fetchMonthlyData() {
+            const dateVal = document.getElementById('current-date').value; 
+            if(!dateVal) return null;
+            const month = dateVal.substring(0, 7); 
+            const res = await apiFetch(`/api/report/month/${month}`);
+            return res ? { month, entries: await res.json() } : null;
+        }
+
+        function updateBudgetProgress() {
+            const budgetVal = document.getElementById('budget-input').value;
+            localStorage.setItem('monthly_budget', budgetVal);
+            
+            const bar = document.getElementById('budget-progress-bar');
+            const text = document.getElementById('budget-percentage-text');
+            
+            if (!budgetVal || budgetVal <= 0 || currentGrandTotal === 0) {
+                bar.style.width = '0%';
+                bar.className = 'bg-primary-500 h-full transition-all duration-500';
+                text.textContent = 'הזן תקציב לחישוב'; return;
+            }
+
+            const percentage = (currentGrandTotal / budgetVal) * 100;
+            const displayPercent = Math.min(percentage, 100).toFixed(0);
+            
+            bar.style.width = `${displayPercent}%`;
+            text.textContent = `${displayPercent}% נוצלו`;
+
+            if (percentage < 75) bar.className = 'bg-green-500 h-full transition-all duration-500';
+            else if (percentage < 95) bar.className = 'bg-yellow-500 h-full transition-all duration-500';
+            else bar.className = 'bg-red-500 h-full transition-all duration-500';
+        }
+
+        async function openDashboard() {
+            const data = await fetchMonthlyData();
+            if(!data || data.entries.length === 0) return showToast('אין נתונים להצגה בחודש זה', 'error');
+
+            let regularTotal = 0; let extraTotal = 0;
+            const productTotals = {}; 
+            const catTotals = {};
+
+            data.entries.forEach(e => {
+                const price = (e.unit_price !== undefined && e.unit_price !== null) ? e.unit_price : (products[e.product_name] || 0);
+                const total = price * e.quantity;
+                if(e.is_extra) extraTotal += total; else regularTotal += total;
+                
+                productTotals[e.product_name] = (productTotals[e.product_name] || 0) + total;
+
+                let cat = 'כללי';
+                if (e.product_name.includes('-')) cat = e.product_name.split('-')[0].trim();
+                catTotals[cat] = (catTotals[cat] || 0) + total;
+            });
+
+            currentGrandTotal = regularTotal + extraTotal;
+
+            document.getElementById('dash-month-title').textContent = data.month;
+            document.getElementById('dash-regular-total').textContent = formatMoney(regularTotal);
+            document.getElementById('dash-extra-total').textContent = formatMoney(extraTotal);
+            document.getElementById('dash-grand-total').textContent = formatMoney(currentGrandTotal);
+
+            const [yearStr, monthStr] = data.month.split('-');
+            const year = parseInt(yearStr), month = parseInt(monthStr);
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const today = new Date();
+            let daysPassed = daysInMonth;
+            if (today.getFullYear() === year && (today.getMonth() + 1) === month) daysPassed = today.getDate() || 1;
+            
+            const forecast = Math.round((currentGrandTotal / daysPassed) * daysInMonth);
+            document.getElementById('dash-forecast').textContent = formatMoney(forecast);
+
+            updateBudgetProgress();
+
+            const ctxDoughnut = document.getElementById('dashboardChart').getContext('2d');
+            if (dashboardChartInstance) dashboardChartInstance.destroy();
+            dashboardChartInstance = new Chart(ctxDoughnut, {
+                type: 'doughnut',
+                data: {
+                    labels: ['שוטפות', 'אקסטרה'],
+                    datasets: [{ data: [regularTotal, extraTotal], backgroundColor: ['#4f46e5', '#f97316'], borderWidth: 0 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { family: 'Heebo' } } } } }
+            });
+
+            const ctxCat = document.getElementById('categoryChart').getContext('2d');
+            if (categoryChartInstance) categoryChartInstance.destroy();
+            categoryChartInstance = new Chart(ctxCat, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(catTotals),
+                    datasets: [{ 
+                        data: Object.values(catTotals), 
+                        backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'], 
+                        borderWidth: 0 
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { family: 'Heebo' } } } } }
+            });
+
+            const sortedProducts = Object.entries(productTotals).sort((a,b) => b[1] - a[1]).slice(0, 5);
+            const ctxBar = document.getElementById('topProductsChart').getContext('2d');
+            if (topProductsChartInstance) topProductsChartInstance.destroy();
+            topProductsChartInstance = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: sortedProducts.map(p => p[0]),
+                    datasets: [{ label: 'סה"כ ₪', data: sortedProducts.map(p => p[1]), backgroundColor: '#6366f1', borderRadius: 4 }]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+
+            const modal = document.getElementById('dashboard-modal');
+            const content = document.getElementById('dashboard-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function closeDashboard() {
+            const modal = document.getElementById('dashboard-modal');
+            const content = document.getElementById('dashboard-content');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        function exportToExcelFull(entriesData, filenamePrefix) {
+            const sorted = [...entriesData].sort((a,b) => a.date.localeCompare(b.date));
+            const regData = [['תאריך', 'שם המוצר', 'כמות', 'מחיר יחידה (ש"ח)', 'סה"כ (ש"ח)']];
+            const extData = [['תאריך', 'שם המוצר', 'כמות', 'מחיר יחידה (ש"ח)', 'סה"כ (ש"ח)']];
+            const allData = [['תאריך', 'שם המוצר', 'סוג', 'כמות', 'מחיר יחידה (ש"ח)', 'סה"כ (ש"ח)']];
+            let regTotal = 0; let extTotal = 0;
+
+            sorted.forEach(e => {
+                // שימוש במחיר הקפוא (unit_price) מזמן ההזנה כשקיים, כדי שהדוח לא יתעוות
+                // אם המחיר במחירון שונה מאז, או שהמוצר נמחק מהמחירון
+                const price = (e.unit_price !== undefined && e.unit_price !== null) ? e.unit_price : (products[e.product_name] || 0);
+                const total = price * e.quantity;
+                const row = [e.date, e.product_name, e.quantity, price, total];
+                allData.push([e.date, e.product_name, e.is_extra ? 'אקסטרה' : 'שוטף', e.quantity, price, total]);
+                if(e.is_extra) { extData.push(row); extTotal += total; }
+                else { regData.push(row); regTotal += total; }
+            });
+
+            regData.push(['', '', '', 'סה"כ שוטף:', regTotal]);
+            extData.push(['', '', '', 'סה"כ אקסטרה:', extTotal]);
+            allData.push(['', '', '', '', 'סה"כ הכל:', regTotal + extTotal]);
+
+            const wb = XLSX.utils.book_new();
+            const wsAll = XLSX.utils.aoa_to_sheet(allData);
+            const wsReg = XLSX.utils.aoa_to_sheet(regData);
+            const wsExt = XLSX.utils.aoa_to_sheet(extData);
+
+            [wsAll, wsReg, wsExt].forEach(ws => {
+                if(!ws['!views']) ws['!views'] = [];
+                ws['!views'].push({ rightToLeft: true });
+            });
+
+            XLSX.utils.book_append_sheet(wb, wsAll, "כל החיובים");
+            XLSX.utils.book_append_sheet(wb, wsReg, "חיובים שוטפים");
+            XLSX.utils.book_append_sheet(wb, wsExt, "חריגות אקסטרה");
+            XLSX.writeFile(wb, `${filenamePrefix}.xlsx`);
+
+            if (extData.length <= 1) {
+                showToast('שים לב: לא נמצאו חיובי אקסטרה בטווח שנבחר', 'error');
+            }
+        }
+
+        async function exportMonthlyReport() {
+            const data = await fetchMonthlyData();
+            if(!data || data.entries.length === 0) return showToast('אין נתונים', 'error');
+            exportToExcelFull(data.entries, `דוח_חיובי_מכללה_${data.month}`);
+            showToast('דוח ה-Excel הופק בהצלחה!');
+            closeDashboard();
+        }
+
+        async function endOfSeasonReset() {
+            if(!confirm("⚠️ אזהרה קריטית!\nפעולה זו תסגור את התקופה הנוכחית ותנקה את כל החיובים.\nהאם אתה בטוח?")) return;
+            showToast('אוסף נתונים לסגירת תקופה...', 'success');
+            const currentYear = new Date().getFullYear();
+            const years = [currentYear - 1, currentYear, currentYear + 1]; 
+            let allEntries = [];
+
+            for (const year of years) {
+                for (let month = 1; month <= 12; month++) {
+                    const monthStr = `${year}-${month.toString().padStart(2, '0')}`;
+                    const res = await apiFetch(`/api/report/month/${monthStr}`);
+                    if (res && res.ok) allEntries = allEntries.concat(await res.json());
+                }
+            }
+
+            if (allEntries.length === 0) return showToast('לא נמצאו חיובים במערכת.', 'error');
+
+            exportToExcelFull(allEntries, "דוח_סגירת_תקופה_מלא");
+            for (const entry of allEntries) {
+                await apiFetch(`/api/entries/${entry.id}`, { method: 'DELETE' });
+            }
+            localStorage.removeItem('monthly_budget');
+            showToast('המערכת אופסה בהצלחה!');
+            closeDashboard();
+            loadEntriesForDate(); 
+        }
+
+        window.onafterprint = function() { document.body.classList.remove('invoice-mode'); }
+
+        function generateFormalInvoice() {
+            const titleElement = document.getElementById('dash-month-title').textContent;
+            const regTotal = document.getElementById('dash-regular-total').textContent;
+            const extTotal = document.getElementById('dash-extra-total').textContent;
+            const grandTotal = document.getElementById('dash-grand-total').textContent;
+
+            document.getElementById('inv-month').textContent = titleElement;
+            document.getElementById('inv-date').textContent = new Date().toLocaleDateString('he-IL');
+            document.getElementById('inv-reg').textContent = regTotal + ' ₪';
+            document.getElementById('inv-ext').textContent = extTotal + ' ₪';
+            document.getElementById('inv-total').textContent = grandTotal + ' ₪';
+
+            closeDashboard();
+            setTimeout(() => { document.body.classList.add('invoice-mode'); window.print(); }, 350); 
+        }
+
+        // --- סקריפטים חדשים ללשוניות המשתמשים (פעימה 4) ---
+        async function openAdminPanel() {
+            await loadActivityLogs();
+            await loadUsersTable();
+            const modal = document.getElementById('admin-modal');
+            const content = document.getElementById('admin-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        }
+
+        function closeAdminPanel() {
+            const modal = document.getElementById('admin-modal');
+            const content = document.getElementById('admin-content');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        async function loadActivityLogs() {
+            const res = await apiFetch('/api/logs');
+            if (res && res.ok) {
+                const logs = await res.json();
+                const tbody = document.getElementById('logs-table-body');
+                tbody.innerHTML = '';
+                logs.forEach(log => {
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50">
+                            <td class="px-4 py-2 text-slate-500 whitespace-nowrap text-right">${log.time}</td>
+                            <td class="px-4 py-2 font-semibold text-slate-700 text-right">${log.user}</td>
+                            <td class="px-4 py-2 font-bold text-primary-600 text-right">${log.action}</td>
+                            <td class="px-4 py-2 text-slate-600 text-right">${log.details}</td>
+                        </tr>`;
+                });
+            }
+        }
+
+        async function loadUsersTable() {
+            const res = await apiFetch('/api/users');
+            if (res && res.ok) {
+                const users = await res.json();
+                const tbody = document.getElementById('users-table-body');
+                tbody.innerHTML = '';
+                users.forEach(u => {
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50">
+                            <td class="px-6 py-3 font-semibold text-slate-800 text-right">${escapeHtml(u.username)}</td>
+                            <td class="px-6 py-3 text-center"><span class="px-2 py-1 rounded-full text-xs font-bold bg-slate-100">${translateRole(u.role)}</span></td>
+                            <td class="px-6 py-3 text-center flex justify-center gap-3">
+                                <button type="button" class="edit-user-btn text-indigo-400 hover:text-indigo-600" data-username="${escapeAttr(u.username)}" data-role="${escapeAttr(u.role)}" title="עריכת משתמש"><i class="fa-solid fa-pen"></i></button>
+                                <button type="button" class="delete-user-btn text-red-400 hover:text-red-600" data-id="${u.id}" data-username="${escapeAttr(u.username)}" title="מחיקת משתמש"><i class="fa-solid fa-user-minus"></i></button>
+                            </td>
+                        </tr>`;
+                });
+            }
+        }
+
+        document.getElementById('users-table-body').addEventListener('click', (e) => {
+            const editBtn = e.target.closest('.edit-user-btn');
+            if (editBtn) { startEditUser(editBtn.dataset.username, editBtn.dataset.role); return; }
+            const delBtn = e.target.closest('.delete-user-btn');
+            if (delBtn) { deleteUser(parseInt(delBtn.dataset.id, 10), delBtn.dataset.username); return; }
+        });
+
+        function startEditUser(username, role) {
+            document.getElementById('user-username').value = username;
+            document.getElementById('user-username').disabled = true;
+            document.getElementById('user-password').value = '';
+            document.getElementById('user-password').required = false;
+            document.getElementById('user-password').placeholder = 'השאר ריק לשמירה על הסיסמה הקיימת';
+            document.getElementById('user-role').value = role;
+            document.getElementById('user-form-submit-text').textContent = 'עדכן משתמש';
+            document.getElementById('user-form-cancel-btn').classList.remove('hidden');
+        }
+
+        function cancelEditUser() {
+            document.getElementById('user-form').reset();
+            document.getElementById('user-username').disabled = false;
+            document.getElementById('user-password').required = true;
+            document.getElementById('user-password').placeholder = '';
+            document.getElementById('user-form-submit-text').textContent = 'שמור משתמש';
+            document.getElementById('user-form-cancel-btn').classList.add('hidden');
+        }
+
+        document.getElementById('user-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('user-username').value.trim();
+            const password = document.getElementById('user-password').value;
+            const role = document.getElementById('user-role').value;
+
+            const res = await apiFetch('/api/users', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username, password, role })
+            });
+
+            if (res && res.ok) {
+                showToast(`המשתמש ${username} נשמר במערכת`);
+                cancelEditUser();
+                loadUsersTable();
+                loadActivityLogs();
+            } else if (res) {
+                const data = await res.json().catch(() => ({}));
+                showToast(data.error || 'שגיאה בשמירת המשתמש', 'error');
+            }
+        });
+
+        async function deleteUser(id, name) {
+            if (!confirm(`האם אתה בטוח שברצונך למחוק את המשתמש ${name}?`)) return;
+            const res = await apiFetch(`/api/users/${id}`, { method: 'DELETE' });
+            if (res && res.ok) {
+                showToast('המשתמש נמחק בהצלחה');
+                loadUsersTable();
+                loadActivityLogs();
+            } else if (res) {
+                const data = await res.json().catch(() => ({}));
+                showToast(data.error || 'שגיאה במחיקה', 'error');
+            }
+        }
+
+        function switchAdminTab(tab) {
+            const logsTab = document.getElementById('admin-tab-logs');
+            const usersTab = document.getElementById('admin-tab-users');
+            const logsBtn = document.getElementById('tab-logs-btn');
+            const usersBtn = document.getElementById('tab-users-btn');
+
+            if (tab === 'logs') {
+                logsTab.classList.remove('hidden'); usersTab.classList.add('hidden');
+                logsBtn.className = "px-4 py-3 border-b-2 border-primary-600 font-bold text-sm text-primary-600";
+                usersBtn.className = "px-4 py-3 border-b-2 border-transparent font-bold text-sm text-slate-600 hover:text-slate-900";
+            } else {
+                logsTab.classList.add('hidden'); usersTab.classList.remove('hidden');
+                usersBtn.className = "px-4 py-3 border-b-2 border-primary-600 font-bold text-sm text-primary-600";
+                logsBtn.className = "px-4 py-3 border-b-2 border-transparent font-bold text-sm text-slate-600 hover:text-slate-900";
+            }
+        }
+
+        async function downloadSystemBackup() {
+            const res = await apiFetch('/api/backup');
+            if (res && res.ok) {
+                const data = await res.json();
+                const backupObject = {
+                    server_data: data,
+                    local_templates: JSON.parse(localStorage.getItem('billing_templates') || '{}'),
+                    backup_date: new Date().toLocaleDateString('he-IL')
+                };
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObject, null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", `system_backup_${data.timestamp.split(' ')[0]}.json`);
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click(); downloadAnchorNode.remove();
+                showToast('קובץ הגיבוי ירד בהצלחה!');
+            }
+        }
+
+        loadProducts();
+    </script>
+</body>
+</html>
