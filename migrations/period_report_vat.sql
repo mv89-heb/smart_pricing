@@ -1,0 +1,3 @@
+-- Period report VAT support
+-- The report UI reads VAT settings from product_vat_settings.
+-- No historical DailyEntry values are modified by this migration.
