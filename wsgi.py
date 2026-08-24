@@ -4,12 +4,14 @@ from app import app, db, DailyEntry, Product, ActivityLog, is_viewer
 from performance import ensure_indexes
 from period_report import register_period_report
 from price_sync import register_price_sync
+from product_identity import register_product_identity
 
 with app.app_context():
     ensure_indexes(db)
 
 register_period_report(app, db, DailyEntry, Product, ActivityLog)
 register_price_sync(app, db, Product, DailyEntry, is_viewer)
+register_product_identity(app, db, Product, DailyEntry)
 
 @app.after_request
 def add_global_navigation(response):
