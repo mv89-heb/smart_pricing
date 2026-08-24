@@ -64,11 +64,12 @@ def register_price_sync(app, db, Product, DailyEntry, is_viewer):
 
         data = request.get_json(silent=True) or {}
 
-        # Product price update is the authoritative operation. Synchronize
-        # every existing charge for the same logical product immediately.
+        # For update_product the URL contains the current/old product name.
+        # Use it to locate the authoritative Product row even when the request
+        # also changes the product name.
         if request.endpoint in {'add_product', 'update_product'}:
             route_name = request.view_args.get('name') if request.view_args else None
-            product_name = (data.get('name') or route_name or '').strip()
+            product_name = (route_name or data.get('name') or '').strip()
             product = _find_product(product_name)
 
             if product and 'price' in data:
