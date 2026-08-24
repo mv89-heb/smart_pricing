@@ -32,7 +32,7 @@ def add_global_navigation(response):
         if 'navigation.js' not in html:
             html=html.replace('</body>','<script src="/static/navigation.js" defer></script></body>',1)
         if request.endpoint in {'period_report_page','period_report_page_alias'} and 'report-entry-editor.js' not in html:
-            html=html.replace('</body>','<script src="/static/report-entry-editor.js" defer></script></body>',1)
+            html=html.replace('</body>','<script src="/static/report-entry-editor.js?v=4" defer></script></body>',1)
         if 'vat-manager.js' not in html:
             html=html.replace('</body>','<script src="/static/vat-manager.js?v=3" defer></script></body>',1)
         response.set_data(html)
