@@ -1,0 +1,18 @@
+-- Category seed reference for current catalog products.
+-- The application seeds these values automatically on startup.
+-- Existing manual category choices are preserved.
+-- Requested VAT rule: vegetables are VAT-exempt; all other categories default to 18%.
+
+-- Current report products:
+-- אבוקדו -> פירות
+-- אבטיח -> פירות
+-- דבש -> ממרחים וממתיקים
+-- כוסות שבת -> חד-פעמי
+-- מגש פירות גדול -> פירות
+-- מייפל -> ממרחים וממתיקים
+-- מלון -> פירות
+-- סילאן -> ממרחים וממתיקים
+-- שיבולת שועל -> דגנים
+-- שמן זית -> שמנים
+-- תפוח -> פירות
+-- בננה/בננות -> פירות
