@@ -9,10 +9,16 @@ def register_price_sync(app, db, Product, DailyEntry, is_viewer):
         return (value or '').strip().casefold()
 
     def _find_product(name):
-        key = _key(name)
+        key = (name or '').strip()
         if not key:
             return None
-        return Product.query.filter(func.lower(func.btrim(Product.name)) == key).first()
+        # The product name is UNIQUE, so use the indexed exact lookup first.
+        product = Product.query.filter_by(name=key).first()
+        if product:
+            return product
+        # Legacy rows/names may differ only by surrounding whitespace/case.
+        normalized = _key(key)
+        return Product.query.filter(func.lower(func.btrim(Product.name)) == normalized).first()
 
     def _ensure_performance_index():
         db.session.execute(text(
@@ -22,18 +28,30 @@ def register_price_sync(app, db, Product, DailyEntry, is_viewer):
         db.session.commit()
 
     def _sync_product_entries(product_name, price, new_name=None):
-        """Update all matching charge rows in one database statement."""
+        """Update matching charge rows with one set-based DB statement."""
         key = _key(product_name)
         if not key:
             return 0
+
         values = {'unit_price': price}
         if new_name is not None:
             values['product_name'] = new_name
+
+        stmt = update(DailyEntry).where(
+            func.lower(func.btrim(DailyEntry.product_name)) == key
+        )
+
+        # Avoid rewriting rows that already contain the desired values.
+        if new_name is None:
+            stmt = stmt.where(DailyEntry.unit_price.is_distinct_from(price))
+        else:
+            stmt = stmt.where(
+                (DailyEntry.unit_price.is_distinct_from(price)) |
+                (DailyEntry.product_name != new_name)
+            )
+
         result = db.session.execute(
-            update(DailyEntry)
-            .where(func.lower(func.btrim(DailyEntry.product_name)) == key)
-            .values(**values)
-            .execution_options(synchronize_session=False)
+            stmt.values(**values).execution_options(synchronize_session=False)
         )
         return int(result.rowcount or 0)
 
@@ -70,25 +88,58 @@ def register_price_sync(app, db, Product, DailyEntry, is_viewer):
             product = _find_product(old_name)
             if not product:
                 return jsonify({'success': False, 'error': 'המוצר לא נמצא'}), 404
+
             new_name = (data.get('name') if data.get('name') is not None else product.name).strip()
             if not new_name:
                 return jsonify({'success': False, 'error': 'שם מוצר לא יכול להיות ריק'}), 400
+
             try:
                 new_price = float(data.get('price', product.price))
             except (TypeError, ValueError):
                 return jsonify({'success': False, 'error': 'מחיר לא תקין'}), 400
             if new_price < 0:
                 return jsonify({'success': False, 'error': 'המחיר לא יכול להיות שלילי'}), 400
-            existing = _find_product(new_name)
+
+            # Exact lookup first; Product.name is unique and indexed.
+            existing = Product.query.filter_by(name=new_name).first()
             if existing is not None and existing.id != product.id:
                 return jsonify({'success': False, 'error': f'מוצר בשם "{new_name}" כבר קיים'}), 400
+
             old_price = product.price
             old_product_name = product.name
+            renamed = old_product_name != new_name
+            price_changed = old_price != new_price
+
+            # Nothing changed: return immediately without touching DailyEntry.
+            if not renamed and not price_changed:
+                return jsonify({
+                    'success': True,
+                    'product': {'id': product.id, 'name': product.name, 'price': product.price},
+                    'renamed': False,
+                    'price_updated': False,
+                    'updated_entries': 0,
+                })
+
             product.name = new_name
             product.price = new_price
-            _sync_product_entries(old_product_name, new_price, new_name=new_name)
+
+            updated_entries = 0
+            if renamed or price_changed:
+                updated_entries = _sync_product_entries(
+                    old_product_name,
+                    new_price,
+                    new_name=new_name if renamed else None,
+                )
+
+            # Single transaction: product + all matching entries commit together.
             db.session.commit()
-            return jsonify({'success': True, 'product': {'name': product.name, 'price': product.price}, 'renamed': old_product_name != new_name, 'price_updated': old_price != new_price})
+            return jsonify({
+                'success': True,
+                'product': {'id': product.id, 'name': product.name, 'price': product.price},
+                'renamed': renamed,
+                'price_updated': price_changed,
+                'updated_entries': updated_entries,
+            })
 
         if request.endpoint == 'add_product':
             product_name = (data.get('name') or '').strip()
