@@ -27,47 +27,67 @@
     const form = document.getElementById('form');
     if (!form || document.getElementById('vat-category')) return;
     const priceInput = document.getElementById('price');
-    const currentName = document.getElementById('name');
     const wrap = document.createElement('div');
     wrap.id = 'vat-category-wrap';
     wrap.innerHTML = `<label class="block text-sm font-black mb-2">קטגוריה</label>${categorySelect('כללי')}<div class="sp-help">המחיר במחירון הוא לפני מע״מ. ירקות ופירות מחושבים ב-0% כאשר נבחרת הקטגוריה.</div><div id="vat-preview" class="text-xs font-bold text-slate-500 mt-2"></div>`;
     priceInput?.closest('div')?.parentElement?.after(wrap);
-    const updatePreview = () => {
-      const cat = document.getElementById('vat-category')?.value || 'כללי';
-      const rate = (vatConfig.zero_vat_categories || []).includes(cat) ? 0 : Number(vatConfig.default_rate || 18);
-      const price = Number(priceInput?.value || 0);
-      const total = price * (1 + rate/100);
-      const el = document.getElementById('vat-preview');
-      if (el) el.textContent = `מע״מ: ${rate}% · מחיר כולל מע״מ: ${money(total)}`;
-    };
+
     document.getElementById('vat-category')?.addEventListener('change', updatePreview);
     priceInput?.addEventListener('input', updatePreview);
     updatePreview();
+
+    const productsTable = document.getElementById('products');
+    productsTable?.addEventListener('click', async e => {
+      const btn = e.target.closest('.edit-btn');
+      if (!btn) return;
+      const p = vatByName.get(btn.dataset.name);
+      if (p) {
+        const select = document.getElementById('vat-category');
+        if (select) select.value = p.category || 'כללי';
+        updatePreview();
+      }
+    });
 
     const originalFetch = window.fetch;
     if (!window.__vatFetchWrapped) {
       window.__vatFetchWrapped = true;
       window.fetch = async (...args) => {
+        const url = String(args[0]?.url || args[0] || '');
+        const options = args[1] || {};
+        const method = String(options.method||'GET').toUpperCase();
+        let body = {};
+        try { body = options.body ? JSON.parse(options.body) : {}; } catch (_) {}
+        const isProductWrite = /\/api\/products(?:\/|$)/.test(url) && ['POST','PUT'].includes(method);
+        const oldName = isProductWrite ? decodeURIComponent(url.split('/api/products/')[1] || '') : '';
+        const preservedCategory = isProductWrite ? (vatByName.get(oldName)?.category || null) : null;
         const response = await originalFetch(...args);
         try {
-          const url = String(args[0]?.url || args[0] || '');
-          const options = args[1] || {};
-          if (/\/api\/products(?:\/|$)/.test(url) && ['POST','PUT'].includes(String(options.method||'GET').toUpperCase()) && response.ok) {
-            const body = options.body ? JSON.parse(options.body) : {};
-            const name = (body.name || '').trim();
-            const category = document.getElementById('vat-category')?.value || 'כללי';
+          if (isProductWrite && response.ok) {
+            const name = (body.name || oldName || '').trim();
+            const category = document.getElementById('vat-category')?.value || preservedCategory || 'כללי';
             setTimeout(async () => {
               if (!name) return;
               const r = await originalFetch(`/api/vat/products/by-name/${encodeURIComponent(name)}`, {cache:'no-store'});
               if (!r.ok) return;
               const p = await r.json();
               await originalFetch(`/api/vat/products/${p.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({category})});
+              await loadVat();
             }, 50);
           }
         } catch (_) {}
         return response;
       };
     }
+  }
+
+  function updatePreview() {
+    const priceInput = document.getElementById('price');
+    const cat = document.getElementById('vat-category')?.value || 'כללי';
+    const rate = (vatConfig.zero_vat_categories || []).includes(cat) ? 0 : Number(vatConfig.default_rate || 18);
+    const price = Number(priceInput?.value || 0);
+    const total = price * (1 + rate/100);
+    const el = document.getElementById('vat-preview');
+    if (el) el.textContent = `מע״מ: ${rate}% · מחיר כולל מע״מ: ${money(total)}`;
   }
 
   function enhanceReport() {
