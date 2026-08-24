@@ -2,12 +2,7 @@ from flask import jsonify, request
 
 
 def register_price_sync(app, db, Product, DailyEntry, is_viewer):
-    """Keep Product.price as the single current price for each logical product.
-
-    Every time a product price is changed, all existing DailyEntry rows for the
-    same logical product are synchronized to that price. Future entries already
-    read Product.price, so they automatically use the same value.
-    """
+    """Keep the price-list product authoritative for all matching charge rows."""
 
     def _key(value):
         return (value or '').strip().casefold()
@@ -18,20 +13,23 @@ def register_price_sync(app, db, Product, DailyEntry, is_viewer):
             return None
         return next((p for p in Product.query.all() if _key(p.name) == key), None)
 
-    def _sync_product_entries(product_name, price):
-        """Update every existing charge row belonging to the logical product."""
+    def _sync_product_entries(product_name, price, new_name=None):
+        """Synchronize every existing charge row belonging to one logical product."""
         key = _key(product_name)
         if not key:
             return 0
         changed = 0
         for entry in DailyEntry.query.all():
-            if _key(entry.product_name) == key and entry.unit_price != price:
-                entry.unit_price = price
-                changed += 1
+            if _key(entry.product_name) == key:
+                if new_name is not None and entry.product_name != new_name:
+                    entry.product_name = new_name
+                    changed += 1
+                if entry.unit_price != price:
+                    entry.unit_price = price
+                    changed += 1
         return changed
 
     def reconcile_all_prices():
-        """Synchronize every charge snapshot with its current price-list product."""
         products = Product.query.all()
         product_map = {_key(p.name): p.price for p in products}
         changed = 0
@@ -64,11 +62,48 @@ def register_price_sync(app, db, Product, DailyEntry, is_viewer):
 
         data = request.get_json(silent=True) or {}
 
-        if request.endpoint in {'add_product', 'update_product'}:
+        # Handle product edits here, before the legacy route runs. This makes the
+        # price-list product the single source of truth and correctly supports
+        # renames even when the request body contains the new name.
+        if request.endpoint == 'update_product':
             route_name = request.view_args.get('name') if request.view_args else None
-            product_name = (route_name or data.get('name') or '').strip()
-            product = _find_product(product_name)
+            old_name = (route_name or '').strip()
+            product = _find_product(old_name)
+            if not product:
+                return jsonify({'success': False, 'error': 'המוצר לא נמצא'}), 404
 
+            new_name = (data.get('name') if data.get('name') is not None else product.name).strip()
+            if not new_name:
+                return jsonify({'success': False, 'error': 'שם מוצר לא יכול להיות ריק'}), 400
+
+            try:
+                new_price = float(data.get('price', product.price))
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': 'מחיר לא תקין'}), 400
+            if new_price < 0:
+                return jsonify({'success': False, 'error': 'המחיר לא יכול להיות שלילי'}), 400
+
+            existing = _find_product(new_name)
+            if existing is not None and existing.id != product.id:
+                return jsonify({'success': False, 'error': f'מוצר בשם "{new_name}" כבר קיים'}), 400
+
+            old_price = product.price
+            old_product_name = product.name
+            product.name = new_name
+            product.price = new_price
+            _sync_product_entries(old_product_name, new_price, new_name=new_name)
+
+            db.session.commit()
+            return jsonify({
+                'success': True,
+                'product': {'name': product.name, 'price': product.price},
+                'renamed': old_product_name != new_name,
+                'price_updated': old_price != new_price,
+            })
+
+        if request.endpoint == 'add_product':
+            product_name = (data.get('name') or '').strip()
+            product = _find_product(product_name)
             if product and 'price' in data:
                 try:
                     new_price = float(data.get('price'))
