@@ -6,6 +6,7 @@ from period_report import register_period_report
 from price_sync import register_price_sync
 from product_identity import register_product_identity
 from report_entry_editor import register_report_entry_editor
+from vat_features import register_vat_features
 
 with app.app_context():
     ensure_indexes(db)
@@ -14,6 +15,7 @@ register_period_report(app, db, DailyEntry, Product, ActivityLog)
 register_price_sync(app, db, Product, DailyEntry, is_viewer)
 register_product_identity(app, db, Product, DailyEntry)
 register_report_entry_editor(app, db, DailyEntry, Product, is_viewer)
+register_vat_features(app, db, Product, is_viewer)
 
 @app.after_request
 def add_global_navigation(response):
@@ -29,6 +31,8 @@ def add_global_navigation(response):
             html=html.replace('</body>','<script src="/static/navigation.js" defer></script></body>',1)
         if request.endpoint in {'period_report_page','period_report_page_alias'} and 'report-entry-editor.js' not in html:
             html=html.replace('</body>','<script src="/static/report-entry-editor.js" defer></script></body>',1)
+        if 'vat-manager.js' not in html:
+            html=html.replace('</body>','<script src="/static/vat-manager.js" defer></script></body>',1)
         response.set_data(html)
     return response
 
