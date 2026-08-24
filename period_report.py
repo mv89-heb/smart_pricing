@@ -29,7 +29,6 @@ def _canonical_product_name(raw_name, products):
             continue
         ratio = SequenceMatcher(None, normalized, candidate).ratio()
         length_gap = abs(len(normalized) - len(candidate))
-        # Conservative handling of common singular/plural spelling changes.
         if ratio >= 0.80 and length_gap <= 3:
             candidates.append((ratio, p))
 
@@ -43,61 +42,177 @@ def _canonical_product_name(raw_name, products):
     return raw
 
 
+def _products_to_zero_rows(products, start_date, end_date, existing_product_ids):
+    """Build zero-quantity rows for products created inside the selected period.
+
+    Products that already have a real entry in the period are not duplicated.
+    The helper intentionally requires a known creation date; legacy products
+    without a reliable creation timestamp are handled separately by the
+    ActivityLog fallback in the report endpoint.
+    """
+    rows = []
+    start = datetime.strptime(start_date, '%Y-%m-%d').date()
+    end = datetime.strptime(end_date, '%Y-%m-%d').date()
+    for product in products:
+        if product.id in existing_product_ids:
+            continue
+        created_at = getattr(product, 'created_at', None)
+        if not created_at:
+            continue
+        created_date = created_at.date() if hasattr(created_at, 'date') else created_at
+        if start <= created_date <= end:
+            rows.append({
+                'id': None,
+                'product_id': product.id,
+                'date': created_date.isoformat(),
+                'product_name': product.name,
+                'quantity': 0.0,
+                'is_extra': False,
+                'unit_price': float(product.price or 0),
+                'total': 0.0,
+            })
+    return rows
+
+
 def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
     @app.get('/api/report/range')
     def get_period_report():
-        start_date=(request.args.get('start_date') or '').strip(); end_date=(request.args.get('end_date') or '').strip()
-        if not start_date or not end_date: return _json_error('יש לבחור תאריך התחלה ותאריך סיום')
+        start_date = (request.args.get('start_date') or '').strip()
+        end_date = (request.args.get('end_date') or '').strip()
+        if not start_date or not end_date:
+            return _json_error('יש לבחור תאריך התחלה ותאריך סיום')
         try:
-            start=datetime.strptime(start_date,'%Y-%m-%d').date(); end=datetime.strptime(end_date,'%Y-%m-%d').date()
-        except ValueError: return _json_error('טווח תאריכים לא תקין')
-        if start>end: return _json_error('תאריך ההתחלה חייב להיות לפני תאריך הסיום')
+            start = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end = datetime.strptime(end_date, '%Y-%m-%d').date()
+        except ValueError:
+            return _json_error('טווח תאריכים לא תקין')
+        if start > end:
+            return _json_error('תאריך ההתחלה חייב להיות לפני תאריך הסיום')
         try:
             products = Product.query.order_by(Product.name.asc()).all() if Product is not None else []
-            rows=[]; grand=regular=extra=qty=0.0
-            entries=(DailyEntry.query.filter(DailyEntry.date>=start_date,DailyEntry.date<=end_date).order_by(DailyEntry.date.desc(),DailyEntry.product_name.asc(),DailyEntry.id.asc()).all())
+            rows = []
+            grand = regular = extra = qty = 0.0
+            entries = (DailyEntry.query
+                       .filter(DailyEntry.date >= start_date, DailyEntry.date <= end_date)
+                       .order_by(DailyEntry.date.desc(), DailyEntry.product_name.asc(), DailyEntry.id.asc())
+                       .all())
+            existing_product_names = set()
             for e in entries:
-                price=float(e.unit_price or 0); amount=float(e.quantity or 0); total=price*amount; grand+=total; qty+=amount
-                if e.is_extra: extra+=total
-                else: regular+=total
+                price = float(e.unit_price or 0)
+                amount = float(e.quantity or 0)
+                total = price * amount
+                grand += total
+                qty += amount
+                if e.is_extra:
+                    extra += total
+                else:
+                    regular += total
                 display_name = _canonical_product_name(e.product_name, products)
-                rows.append({'id':e.id,'date':e.date.isoformat() if hasattr(e.date,'isoformat') else str(e.date),'product_name':display_name,'quantity':amount,'is_extra':bool(e.is_extra),'unit_price':price,'total':total})
-            return jsonify({'start_date':start_date,'end_date':end_date,'rows':rows,'summary':{'entries':len(rows),'quantity':qty,'regular_total':regular,'extra_total':extra,'grand_total':grand}})
+                existing_product_names.add(' '.join(display_name.split()).casefold())
+                rows.append({
+                    'id': e.id,
+                    'date': e.date.isoformat() if hasattr(e.date, 'isoformat') else str(e.date),
+                    'product_name': display_name,
+                    'quantity': amount,
+                    'is_extra': bool(e.is_extra),
+                    'unit_price': price,
+                    'total': total,
+                })
+
+            # Products added during the selected period are part of the catalog
+            # view even when nobody has charged them yet. They appear as a zero
+            # quantity row and never affect monetary/quantity summaries.
+            zero_rows = []
+            for product in products:
+                normalized_name = ' '.join((product.name or '').split()).casefold()
+                if normalized_name in existing_product_names:
+                    continue
+                created_at = getattr(product, 'created_at', None)
+                if not created_at and ActivityLog is not None:
+                    prefix = 'מוצר חדש: '
+                    legacy_logs = (ActivityLog.query
+                                   .filter(ActivityLog.action == 'NEW_PRODUCT')
+                                   .order_by(ActivityLog.timestamp.asc())
+                                   .all())
+                    for log in legacy_logs:
+                        if log.details.startswith(prefix):
+                            logged_name = log.details[len(prefix):].split(', מחיר:', 1)[0].strip()
+                            if logged_name == product.name:
+                                created_at = log.timestamp
+                                break
+                if not created_at:
+                    continue
+                created_date = created_at.date() if hasattr(created_at, 'date') else created_at
+                if start <= created_date <= end:
+                    zero_rows.append({
+                        'id': None,
+                        'date': created_date.isoformat(),
+                        'product_name': product.name,
+                        'quantity': 0.0,
+                        'is_extra': False,
+                        'unit_price': float(product.price or 0),
+                        'total': 0.0,
+                    })
+
+            rows.extend(zero_rows)
+            rows.sort(key=lambda r: (r['date'], r['product_name']), reverse=True)
+            return jsonify({
+                'start_date': start_date,
+                'end_date': end_date,
+                'rows': rows,
+                'summary': {
+                    'entries': len(entries),
+                    'quantity': qty,
+                    'regular_total': regular,
+                    'extra_total': extra,
+                    'grand_total': grand,
+                    'catalog_products_added': len(zero_rows),
+                }
+            })
         except Exception:
-            app.logger.exception('Period report query failed'); return _json_error('שגיאה בטעינת הדוח. הנתונים לא שונו.',500)
+            app.logger.exception('Period report query failed')
+            return _json_error('שגיאה בטעינת הדוח. הנתונים לא שונו.', 500)
 
     @app.get('/api/report/products')
     def get_report_products():
-        if Product is None: return jsonify({'products':[],'count':0})
+        if Product is None:
+            return jsonify({'products': [], 'count': 0})
         try:
-            products=Product.query.order_by(Product.name.asc()).all()
+            products = Product.query.order_by(Product.name.asc()).all()
             needs_legacy_lookup = any(getattr(p, 'created_at', None) is None for p in products)
-            added={}
+            added = {}
             if needs_legacy_lookup and ActivityLog is not None:
-                for log in ActivityLog.query.filter(ActivityLog.action=='NEW_PRODUCT').order_by(ActivityLog.timestamp.asc()).all():
-                    prefix='מוצר חדש: '
+                for log in ActivityLog.query.filter(ActivityLog.action == 'NEW_PRODUCT').order_by(ActivityLog.timestamp.asc()).all():
+                    prefix = 'מוצר חדש: '
                     if log.details.startswith(prefix):
-                        name=log.details[len(prefix):].split(', מחיר:',1)[0].strip(); added.setdefault(name,log.timestamp)
+                        name = log.details[len(prefix):].split(', מחיר:', 1)[0].strip()
+                        added.setdefault(name, log.timestamp)
             def added_at(p):
                 if getattr(p, 'created_at', None):
                     return p.created_at.isoformat()
                 legacy = added.get(p.name)
                 return legacy.isoformat() if legacy else None
-            return jsonify({'products':[{'id':p.id,'name':p.name,'price':float(p.price or 0),'added_at':added_at(p)} for p in products],'count':len(products)})
+            return jsonify({'products': [{'id': p.id, 'name': p.name, 'price': float(p.price or 0), 'added_at': added_at(p)} for p in products], 'count': len(products)})
         except Exception:
-            app.logger.exception('Period report product query failed'); return _json_error('שגיאה בטעינת המחירון. הנתונים לא שונו.',500)
+            app.logger.exception('Period report product query failed')
+            return _json_error('שגיאה בטעינת המחירון. הנתונים לא שונו.', 500)
 
     @app.get('/products/new')
-    def product_add_page(): return render_template('product_add.html')
+    def product_add_page():
+        return render_template('product_add.html')
 
     @app.get('/dashboard')
-    def dashboard_page(): return render_template('dashboard.html')
+    def dashboard_page():
+        return render_template('dashboard.html')
 
     @app.get('/settings')
-    def settings_page(): return render_template('settings.html')
+    def settings_page():
+        return render_template('settings.html')
 
     @app.get('/period-report')
-    def period_report_page_alias(): return render_template('period_report.html')
+    def period_report_page_alias():
+        return render_template('period_report.html')
 
     @app.get('/')
-    def period_report_page(): return render_template('period_report.html')
+    def period_report_page():
+        return render_template('period_report.html')
