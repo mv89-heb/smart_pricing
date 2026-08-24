@@ -1,6 +1,7 @@
 from datetime import datetime, date
 from difflib import SequenceMatcher
 from flask import render_template, request, jsonify
+from sqlalchemy import text
 
 
 def _json_error(message, status=400):
@@ -33,24 +34,62 @@ def _canonical_product_name(raw_name, products):
     return raw
 
 
-def _products_to_zero_rows(products, start_date, end_date, existing_product_ids):
-    rows = []
-    start = datetime.strptime(start_date, '%Y-%m-%d').date()
-    end = datetime.strptime(end_date, '%Y-%m-%d').date()
-    for product in products:
-        if product.id in existing_product_ids:
-            continue
-        created_at = getattr(product, 'created_at', None)
-        if not created_at:
-            continue
-        created_date = created_at.date() if hasattr(created_at, 'date') else created_at
-        if start <= created_date <= end:
-            rows.append({
-                'id': None, 'product_id': product.id, 'date': created_date.isoformat(),
-                'product_name': product.name, 'quantity': 0.0, 'is_extra': False,
-                'unit_price': float(product.price or 0), 'total': 0.0,
-            })
-    return rows
+def _vat_settings(db):
+    try:
+        result = db.session.execute(text('''
+            SELECT product_id, category, vat_rate
+            FROM product_vat_settings
+        ''')).mappings().all()
+        settings = {}
+        for row in result:
+            category = (row['category'] or 'כללי').strip()
+            rate = 0.0 if category == 'ירקות' else float(row['vat_rate'] or 0)
+            settings[int(row['product_id'])] = {'category': category, 'vat_rate': rate}
+        return settings
+    except Exception:
+        db.session.rollback()
+        return {}
+
+
+def _vat_for_product(settings, product_id):
+    item = settings.get(int(product_id)) if product_id is not None else None
+    if not item:
+        return {'category': 'כללי', 'vat_rate': 18.0}
+    return item
+
+
+def _render_period_report_page():
+    html = render_template('period_report.html')
+    # Inject inside the existing inline script so the renderer shares its lexical state.
+    injection = r'''
+(function(){
+  renderRows = function(){
+    const q=$('search').value.trim().toLowerCase();
+    let v=rows.filter(r=>`${r.product_name} ${r.date}`.toLowerCase().includes(q));
+    v=sortRows(v,rowsSort);
+    $('rows').innerHTML=v.map(r=>`<tr><td>${fmt(r.date)}</td><td class="font-black">${esc(r.product_name)}</td><td><span class="sp-badge ${r.is_extra?'extra':'normal'}">${r.is_extra?'אקסטרה':'רגיל'}</span></td><td class="text-center sp-number">${Number(r.quantity).toLocaleString('he-IL')}</td><td class="text-center sp-number">${money(r.unit_price)}</td><td class="text-center sp-number">${Number(r.vat_rate??18).toLocaleString('he-IL',{maximumFractionDigits:2})}%</td><td class="text-center sp-number">${money(r.vat_amount||0)}</td><td class="text-center font-black sp-number">${money(r.total_with_vat??r.total)}</td></tr>`).join('');
+    $('empty').classList.toggle('hidden',v.length!==0);
+  };
+  const head=$('rows-head');
+  if(head){
+    const tr=head.querySelector('tr');
+    if(tr && !tr.querySelector('[data-vat-column]')){
+      const th=document.createElement('th');th.setAttribute('data-vat-column','1');th.className='text-center';th.textContent='מע״מ';tr.appendChild(th);
+      const th2=document.createElement('th');th2.className='text-center';th2.textContent='סכום כולל מע״מ';tr.appendChild(th2);
+    }
+  }
+  exportCsv = function(){
+    if(!rows.length){alert('אין נתונים לייצוא');return}
+    const head=['תאריך','מוצר','סוג','כמות','מחיר יחידה','מע״מ','סכום מע״מ','סה״כ כולל מע״מ'];
+    const lines=[head,...rows.map(r=>[r.date,r.product_name,r.is_extra?'אקסטרה':'רגיל',r.quantity,r.unit_price,`${Number(r.vat_rate??18).toFixed(2)}%`,r.vat_amount||0,r.total_with_vat??r.total])].map(a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(','));
+    const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`smart-pricing-${$('start').value}-${$('end').value}.csv`;a.click();URL.revokeObjectURL(a.href);
+  };
+})();
+'''
+    marker = '</script></body>'
+    if marker in html:
+        return html.replace(marker, injection + marker, 1)
+    return html
 
 
 def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
@@ -69,8 +108,9 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
             return _json_error('תאריך ההתחלה חייב להיות לפני תאריך הסיום')
         try:
             products = Product.query.order_by(Product.name.asc()).all() if Product is not None else []
+            vat_settings = _vat_settings(db)
             rows = []
-            grand = regular = extra = qty = 0.0
+            grand = regular = extra = qty = vat_total = grand_with_vat = 0.0
             entries = (DailyEntry.query
                        .filter(DailyEntry.date >= start_date, DailyEntry.date <= end_date)
                        .order_by(DailyEntry.date.desc(), DailyEntry.product_name.asc(), DailyEntry.id.asc())
@@ -81,7 +121,13 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
                 price = float(e.unit_price or 0)
                 amount = float(e.quantity or 0)
                 total = price * amount
+                product_id = getattr(e, 'product_id', None)
+                vat = _vat_for_product(vat_settings, product_id)
+                vat_amount = total * vat['vat_rate'] / 100.0
+                total_with_vat = total + vat_amount
                 grand += total
+                vat_total += vat_amount
+                grand_with_vat += total_with_vat
                 qty += amount
                 if e.is_extra:
                     extra += total
@@ -89,7 +135,6 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
                     regular += total
                 display_name = _canonical_product_name(e.product_name, products)
                 existing_product_names.add(' '.join(display_name.split()).casefold())
-                product_id = getattr(e, 'product_id', None)
                 if product_id is not None:
                     existing_product_ids.add(product_id)
                 rows.append({
@@ -101,6 +146,10 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
                     'is_extra': bool(e.is_extra),
                     'unit_price': price,
                     'total': total,
+                    'category': vat['category'],
+                    'vat_rate': vat['vat_rate'],
+                    'vat_amount': vat_amount,
+                    'total_with_vat': total_with_vat,
                 })
 
             zero_rows = []
@@ -132,14 +181,11 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
                         continue
                     display_date = created_date
                 else:
-                    # Legacy products created before created_at/activity logging was introduced
-                    # have no reliable historical creation timestamp. For a report ending today,
-                    # they are known to exist by the report end date, so include them as zero rows.
-                    # This specifically prevents older products from disappearing from current
-                    # period reports after the catalog/report refactor.
                     if end < today:
                         continue
                     display_date = end
+                vat = _vat_for_product(vat_settings, product.id)
+                price = float(product.price or 0)
                 zero_rows.append({
                     'id': None,
                     'product_id': product.id,
@@ -147,8 +193,12 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
                     'product_name': product.name,
                     'quantity': 0.0,
                     'is_extra': False,
-                    'unit_price': float(product.price or 0),
+                    'unit_price': price,
                     'total': 0.0,
+                    'category': vat['category'],
+                    'vat_rate': vat['vat_rate'],
+                    'vat_amount': 0.0,
+                    'total_with_vat': 0.0,
                 })
 
             rows.extend(zero_rows)
@@ -163,6 +213,8 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
                     'regular_total': regular,
                     'extra_total': extra,
                     'grand_total': grand,
+                    'vat_total': vat_total,
+                    'grand_total_with_vat': grand_with_vat,
                     'catalog_products_added': len(zero_rows),
                 }
             })
@@ -209,8 +261,8 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
 
     @app.get('/period-report')
     def period_report_page_alias():
-        return render_template('period_report.html')
+        return _render_period_report_page()
 
     @app.get('/')
     def period_report_page():
-        return render_template('period_report.html')
+        return _render_period_report_page()
