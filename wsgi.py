@@ -5,6 +5,7 @@ from performance import ensure_indexes
 from period_report import register_period_report
 from price_sync import register_price_sync
 from product_identity import register_product_identity
+from report_entry_editor import register_report_entry_editor
 
 with app.app_context():
     ensure_indexes(db)
@@ -12,11 +13,11 @@ with app.app_context():
 register_period_report(app, db, DailyEntry, Product, ActivityLog)
 register_price_sync(app, db, Product, DailyEntry, is_viewer)
 register_product_identity(app, db, Product, DailyEntry)
+register_report_entry_editor(app, db, DailyEntry, Product, is_viewer)
 
 @app.after_request
 def add_global_navigation(response):
     content_type=response.headers.get('Content-Type','')
-    # לא מזריקים תפריט (עם קישורי דשבורד/יציאה) למסך ההתחברות - המשתמש עוד לא מחובר
     if request.endpoint == 'login':
         return response
     if 'text/html' in content_type and response.status_code < 400:
@@ -26,6 +27,8 @@ def add_global_navigation(response):
             html=html.replace('</head>','<link rel="stylesheet" href="/static/navigation.css"><link rel="stylesheet" href="/static/ux-refresh.css"></head>',1)
         if 'navigation.js' not in html:
             html=html.replace('</body>','<script src="/static/navigation.js" defer></script></body>',1)
+        if request.endpoint in {'period_report_page','period_report_page_alias'} and 'report-entry-editor.js' not in html:
+            html=html.replace('</body>','<script src="/static/report-entry-editor.js" defer></script></body>',1)
         response.set_data(html)
     return response
 
