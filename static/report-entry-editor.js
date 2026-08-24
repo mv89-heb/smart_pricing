@@ -1,6 +1,17 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   let editorModal;
+  let reportRows = [];
+
+  async function refreshReportRows() {
+    const start = $('start')?.value;
+    const end = $('end')?.value;
+    if (!start || !end) return;
+    try {
+      const r = await fetch(`/api/report/range?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, {cache:'no-store'});
+      if (r.ok) reportRows = (await r.json()).rows || [];
+    } catch (_) {}
+  }
 
   function ensureModal() {
     if (editorModal) return editorModal;
@@ -28,16 +39,14 @@
 
   function close() { if (editorModal) editorModal.style.display = 'none'; }
 
-  function findEntryForRow(tr) {
-    if (!window.rows) return null;
+  function resolveEntryForRow(tr) {
     const cells = tr.querySelectorAll('td');
     if (cells.length < 6) return null;
     const dateText = cells[0].textContent.trim();
     const name = cells[1].textContent.trim();
     const type = cells[2].textContent.includes('אקסטרה');
     const qty = Number(cells[3].textContent.replace(/,/g, ''));
-    const candidates = window.rows.filter(r => String(r.product_name || '') === name && !!r.is_extra === type && Number(r.quantity) === qty);
-    if (candidates.length === 1) return candidates[0];
+    const candidates = reportRows.filter(r => String(r.product_name || '') === name && !!r.is_extra === type && Number(r.quantity) === qty);
     const byDate = candidates.find(r => {
       const p = String(r.date).slice(0,10).split('-');
       return p.length === 3 && `${p[2]}/${p[1]}/${p[0]}` === dateText;
@@ -57,7 +66,7 @@
     }
     tbody.querySelectorAll('tr').forEach(tr => {
       if (tr.dataset.editorReady || tr.children.length < 6) return;
-      const entry = findEntryForRow(tr);
+      const entry = resolveEntryForRow(tr);
       if (!entry) return;
       tr.dataset.editorReady = '1';
       const td = document.createElement('td');
@@ -81,19 +90,15 @@
       try {
         const response = await fetch(`/api/report/entries/${entry.id}`, {
           method: 'PUT', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({
-            product_name: $('re-name').value.trim(),
-            quantity: $('re-qty').value,
-            unit_price: $('re-price').value,
-            is_extra: $('re-extra').checked
-          })
+          body: JSON.stringify({product_name:$('re-name').value.trim(),quantity:$('re-qty').value,unit_price:$('re-price').value,is_extra:$('re-extra').checked})
         });
         const data = await response.json();
         if (!response.ok || !data.success) throw new Error(data.error || 'העדכון נכשל');
         close();
         if (typeof window.loadReport === 'function') await window.loadReport();
         if (typeof window.loadProducts === 'function') await window.loadProducts();
-        alert('החיוב והמוצר עודכנו בהצלחה');
+        await refreshReportRows();
+        setTimeout(decorateRows, 100);
       } catch (err) {
         $('re-error').textContent = err.message;
         $('re-error').style.display = 'block';
@@ -102,7 +107,8 @@
   }
 
   const observer = new MutationObserver(decorateRows);
-  window.addEventListener('DOMContentLoaded', () => {
+  window.addEventListener('DOMContentLoaded', async () => {
+    await refreshReportRows();
     const tbody = $('rows');
     if (tbody) observer.observe(tbody, {childList:true, subtree:true});
     setTimeout(decorateRows, 300);
