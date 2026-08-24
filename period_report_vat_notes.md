@@ -1,0 +1,1 @@
+The period report exposes each row's effective VAT rate from product_vat_settings. Historical DailyEntry amounts are unchanged.
