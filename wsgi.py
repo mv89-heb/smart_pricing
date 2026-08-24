@@ -7,6 +7,7 @@ from price_sync import register_price_sync
 from product_identity import register_product_identity
 from report_entry_editor import register_report_entry_editor
 from vat_features import register_vat_features
+from product_update_fast import register_fast_product_update
 
 with app.app_context():
     ensure_indexes(db)
@@ -16,6 +17,7 @@ register_price_sync(app, db, Product, DailyEntry, is_viewer)
 register_product_identity(app, db, Product, DailyEntry)
 register_report_entry_editor(app, db, DailyEntry, Product, is_viewer)
 register_vat_features(app, db, Product, is_viewer)
+register_fast_product_update(app, db, Product, DailyEntry, ActivityLog, is_viewer)
 
 @app.after_request
 def add_global_navigation(response):
