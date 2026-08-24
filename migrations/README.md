@@ -1,0 +1,1 @@
+Database maintenance migrations in this directory are intended to be reviewed and executed against the configured production database after deployment. They do not run automatically on application startup.
