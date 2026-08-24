@@ -1,9 +1,46 @@
 from datetime import datetime
+from difflib import SequenceMatcher
 from flask import render_template, request, jsonify
 
 
 def _json_error(message, status=400):
     return jsonify({'error': message}), status
+
+
+def _canonical_product_name(raw_name, products):
+    """Return the current price-list name when the legacy entry name can be
+    matched safely. Exact normalized matches win. Fuzzy matching is only used
+    for a unique, high-confidence candidate so unrelated products are never
+    silently renamed.
+    """
+    raw = (raw_name or '').strip()
+    if not raw or not products:
+        return raw
+
+    normalized = ' '.join(raw.split()).casefold()
+    exact = [p for p in products if ' '.join((p.name or '').split()).casefold() == normalized]
+    if len(exact) == 1:
+        return exact[0].name
+
+    candidates = []
+    for p in products:
+        candidate = ' '.join((p.name or '').split()).casefold()
+        if not candidate:
+            continue
+        ratio = SequenceMatcher(None, normalized, candidate).ratio()
+        length_gap = abs(len(normalized) - len(candidate))
+        # Conservative handling of common singular/plural spelling changes.
+        if ratio >= 0.80 and length_gap <= 3:
+            candidates.append((ratio, p))
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    if candidates:
+        best_ratio, best = candidates[0]
+        second_ratio = candidates[1][0] if len(candidates) > 1 else 0
+        if best_ratio >= 0.86 and (len(candidates) == 1 or best_ratio - second_ratio >= 0.06):
+            return best.name
+
+    return raw
 
 
 def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
@@ -16,13 +53,15 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
         except ValueError: return _json_error('טווח תאריכים לא תקין')
         if start>end: return _json_error('תאריך ההתחלה חייב להיות לפני תאריך הסיום')
         try:
-            entries=(DailyEntry.query.filter(DailyEntry.date>=start_date,DailyEntry.date<=end_date).order_by(DailyEntry.date.desc(),DailyEntry.product_name.asc(),DailyEntry.id.asc()).all())
+            products = Product.query.order_by(Product.name.asc()).all() if Product is not None else []
             rows=[]; grand=regular=extra=qty=0.0
+            entries=(DailyEntry.query.filter(DailyEntry.date>=start_date,DailyEntry.date<=end_date).order_by(DailyEntry.date.desc(),DailyEntry.product_name.asc(),DailyEntry.id.asc()).all())
             for e in entries:
                 price=float(e.unit_price or 0); amount=float(e.quantity or 0); total=price*amount; grand+=total; qty+=amount
                 if e.is_extra: extra+=total
                 else: regular+=total
-                rows.append({'id':e.id,'date':e.date.isoformat() if hasattr(e.date,'isoformat') else str(e.date),'product_name':e.product_name,'quantity':amount,'is_extra':bool(e.is_extra),'unit_price':price,'total':total})
+                display_name = _canonical_product_name(e.product_name, products)
+                rows.append({'id':e.id,'date':e.date.isoformat() if hasattr(e.date,'isoformat') else str(e.date),'product_name':display_name,'quantity':amount,'is_extra':bool(e.is_extra),'unit_price':price,'total':total})
             return jsonify({'start_date':start_date,'end_date':end_date,'rows':rows,'summary':{'entries':len(rows),'quantity':qty,'regular_total':regular,'extra_total':extra,'grand_total':grand}})
         except Exception:
             app.logger.exception('Period report query failed'); return _json_error('שגיאה בטעינת הדוח. הנתונים לא שונו.',500)
@@ -32,8 +71,6 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
         if Product is None: return jsonify({'products':[],'count':0})
         try:
             products=Product.query.order_by(Product.name.asc()).all()
-            # לגבי מוצרים שנוצרו לפני שהתווסף created_at (עמודה חדשה) - עדיין משחזרים
-            # תאריך היסטורי מיומן הפעילות, כדי לא לאבד מידע קיים.
             needs_legacy_lookup = any(getattr(p, 'created_at', None) is None for p in products)
             added={}
             if needs_legacy_lookup and ActivityLog is not None:
@@ -62,6 +99,5 @@ def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
     @app.get('/period-report')
     def period_report_page_alias(): return render_template('period_report.html')
 
-    # דוח התקופה משמש כדף הבית של המערכת (כפי שהתפריט הצדדי וכל שאר המסכים מניחים).
     @app.get('/')
     def period_report_page(): return render_template('period_report.html')
