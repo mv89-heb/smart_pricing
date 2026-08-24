@@ -34,26 +34,6 @@ def _canonical_product_name(raw_name, products):
     return raw
 
 
-def _products_to_zero_rows(products, start_date, end_date, existing_product_ids):
-    rows = []
-    start = datetime.strptime(start_date, '%Y-%m-%d').date()
-    end = datetime.strptime(end_date, '%Y-%m-%d').date()
-    for product in products:
-        if product.id in existing_product_ids:
-            continue
-        created_at = getattr(product, 'created_at', None)
-        if not created_at:
-            continue
-        created_date = created_at.date() if hasattr(created_at, 'date') else created_at
-        if start <= created_date <= end:
-            rows.append({
-                'id': None, 'product_id': product.id, 'date': created_date.isoformat(),
-                'product_name': product.name, 'quantity': 0.0, 'is_extra': False,
-                'unit_price': float(product.price or 0), 'total': 0.0,
-            })
-    return rows
-
-
 def _vat_settings(db):
     try:
         result = db.session.execute(text('''
@@ -67,7 +47,6 @@ def _vat_settings(db):
             settings[int(row['product_id'])] = {'category': category, 'vat_rate': rate}
         return settings
     except Exception:
-        # Keep the period report available if VAT support has not been initialized yet.
         db.session.rollback()
         return {}
 
@@ -81,36 +60,36 @@ def _vat_for_product(settings, product_id):
 
 def _render_period_report_page():
     html = render_template('period_report.html')
-    # The existing template is intentionally kept intact. Inject the final VAT-aware
-    # renderer into the page so the deployed report cannot silently use the old table.
-    injection = r'''<script>
+    # Inject inside the existing inline script so the renderer shares its lexical state.
+    injection = r'''
 (function(){
-  const originalRenderRows = window.renderRows;
-  window.renderRows = function(){
-    const q=document.getElementById('search').value.trim().toLowerCase();
-    let v=window.rows.filter(r=>`${r.product_name} ${r.date}`.toLowerCase().includes(q));
-    v=window.sortRows(v,window.rowsSort);
-    document.getElementById('rows').innerHTML=v.map(r=>`<tr><td>${window.fmt(r.date)}</td><td class="font-black">${window.esc(r.product_name)}</td><td><span class="sp-badge ${r.is_extra?'extra':'normal'}">${r.is_extra?'אקסטרה':'רגיל'}</span></td><td class="text-center sp-number">${Number(r.quantity).toLocaleString('he-IL')}</td><td class="text-center sp-number">${window.money(r.unit_price)}</td><td class="text-center sp-number">${Number(r.vat_rate??18).toLocaleString('he-IL',{maximumFractionDigits:2})}%</td><td class="text-center sp-number">${window.money(r.vat_amount||0)}</td><td class="text-center font-black sp-number">${window.money(r.total_with_vat??r.total)}</td></tr>`).join('');
-    document.getElementById('empty').classList.toggle('hidden',v.length!==0);
+  renderRows = function(){
+    const q=$('search').value.trim().toLowerCase();
+    let v=rows.filter(r=>`${r.product_name} ${r.date}`.toLowerCase().includes(q));
+    v=sortRows(v,rowsSort);
+    $('rows').innerHTML=v.map(r=>`<tr><td>${fmt(r.date)}</td><td class="font-black">${esc(r.product_name)}</td><td><span class="sp-badge ${r.is_extra?'extra':'normal'}">${r.is_extra?'אקסטרה':'רגיל'}</span></td><td class="text-center sp-number">${Number(r.quantity).toLocaleString('he-IL')}</td><td class="text-center sp-number">${money(r.unit_price)}</td><td class="text-center sp-number">${Number(r.vat_rate??18).toLocaleString('he-IL',{maximumFractionDigits:2})}%</td><td class="text-center sp-number">${money(r.vat_amount||0)}</td><td class="text-center font-black sp-number">${money(r.total_with_vat??r.total)}</td></tr>`).join('');
+    $('empty').classList.toggle('hidden',v.length!==0);
   };
-  const head=document.getElementById('rows-head');
+  const head=$('rows-head');
   if(head){
     const tr=head.querySelector('tr');
     if(tr && !tr.querySelector('[data-vat-column]')){
-      const th=document.createElement('th'); th.setAttribute('data-vat-column','1'); th.className='text-center'; th.textContent='מע״מ'; tr.appendChild(th);
-      const th2=document.createElement('th'); th2.className='text-center'; th2.textContent='סה״כ כולל מע״מ'; tr.appendChild(th2);
+      const th=document.createElement('th');th.setAttribute('data-vat-column','1');th.className='text-center';th.textContent='מע״מ';tr.appendChild(th);
+      const th2=document.createElement('th');th2.className='text-center';th2.textContent='סכום כולל מע״מ';tr.appendChild(th2);
     }
   }
-  const oldExport=window.exportCsv;
-  window.exportCsv=function(){
-    if(!window.rows.length){alert('אין נתונים לייצוא');return}
+  exportCsv = function(){
+    if(!rows.length){alert('אין נתונים לייצוא');return}
     const head=['תאריך','מוצר','סוג','כמות','מחיר יחידה','מע״מ','סכום מע״מ','סה״כ כולל מע״מ'];
-    const lines=[head,...window.rows.map(r=>[r.date,r.product_name,r.is_extra?'אקסטרה':'רגיל',r.quantity,r.unit_price,`${Number(r.vat_rate??18).toFixed(2)}%`,r.vat_amount||0,r.total_with_vat??r.total])].map(a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(','));
-    const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`smart-pricing-${document.getElementById('start').value}-${document.getElementById('end').value}.csv`;a.click();URL.revokeObjectURL(a.href);
+    const lines=[head,...rows.map(r=>[r.date,r.product_name,r.is_extra?'אקסטרה':'רגיל',r.quantity,r.unit_price,`${Number(r.vat_rate??18).toFixed(2)}%`,r.vat_amount||0,r.total_with_vat??r.total])].map(a=>a.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(','));
+    const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`smart-pricing-${$('start').value}-${$('end').value}.csv`;a.click();URL.revokeObjectURL(a.href);
   };
 })();
-</script>'''
-    return html.replace('</body>', injection + '</body>')
+'''
+    marker = '</script></body>'
+    if marker in html:
+        return html.replace(marker, injection + marker, 1)
+    return html
 
 
 def register_period_report(app, db, DailyEntry, Product=None, ActivityLog=None):
