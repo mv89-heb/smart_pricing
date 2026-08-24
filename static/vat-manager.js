@@ -1,18 +1,21 @@
 (() => {
   'use strict';
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const money = v => new Intl.NumberFormat('he-IL',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0) + ' ₪';
-  let vatProducts = [], vatByName = new Map();
+  let vatProducts = [], vatByName = new Map(), vatById = new Map();
   let vatConfig = {default_rate:18,categories:['כללי','ירקות','פירות','ממרחים וממתיקים','דגנים','שמנים','חד-פעמי','מוצרי מזון','אחר'],zero_vat_categories:['ירקות']};
 
   async function loadVat() {
     try {
-      const [cfgRes, prodRes] = await Promise.all([fetch('/api/vat/config',{cache:'no-store'}), fetch('/api/vat/products',{cache:'no-store'})]);
+      const [cfgRes, prodRes] = await Promise.all([
+        fetch('/api/vat/config',{cache:'no-store'}),
+        fetch('/api/vat/products',{cache:'no-store'})
+      ]);
       if (cfgRes.ok) vatConfig = await cfgRes.json();
       if (prodRes.ok) {
         const d = await prodRes.json();
         vatProducts = d.products || [];
         vatByName = new Map(vatProducts.map(p => [p.name,p]));
+        vatById = new Map(vatProducts.map(p => [Number(p.id),p]));
       }
       enhanceCatalog();
       enhanceReport();
@@ -20,7 +23,7 @@
   }
 
   function categorySelect(value) {
-    return `<select id="vat-category" class="sp-input"><option value="">בחר קטגוריה</option>${vatConfig.categories.map(c => `<option value="${esc(c)}" ${c===value?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
+    return `<select id="vat-category" class="sp-input"><option value="">בחר קטגוריה</option>${vatConfig.categories.map(c => `<option value="${String(c).replace(/"/g,'&quot;')}" ${c===value?'selected':''}>${c}</option>`).join('')}</select>`;
   }
 
   function enhanceCatalog() {
@@ -31,53 +34,9 @@
     wrap.id = 'vat-category-wrap';
     wrap.innerHTML = `<label class="block text-sm font-black mb-2">קטגוריה</label>${categorySelect('כללי')}<div class="sp-help">המחיר במחירון הוא לפני מע״מ. ירקות מחושבים ב-0% כאשר נבחרת הקטגוריה.</div><div id="vat-preview" class="text-xs font-bold text-slate-500 mt-2"></div>`;
     priceInput?.closest('div')?.parentElement?.after(wrap);
-
     document.getElementById('vat-category')?.addEventListener('change', updatePreview);
     priceInput?.addEventListener('input', updatePreview);
     updatePreview();
-
-    const productsTable = document.getElementById('products');
-    productsTable?.addEventListener('click', async e => {
-      const btn = e.target.closest('.edit-btn');
-      if (!btn) return;
-      const p = vatByName.get(btn.dataset.name);
-      if (p) {
-        const select = document.getElementById('vat-category');
-        if (select) select.value = p.category || 'כללי';
-        updatePreview();
-      }
-    });
-
-    const originalFetch = window.fetch;
-    if (!window.__vatFetchWrapped) {
-      window.__vatFetchWrapped = true;
-      window.fetch = async (...args) => {
-        const url = String(args[0]?.url || args[0] || '');
-        const options = args[1] || {};
-        const method = String(options.method||'GET').toUpperCase();
-        let body = {};
-        try { body = options.body ? JSON.parse(options.body) : {}; } catch (_) {}
-        const isProductWrite = /\/api\/products(?:\/|$)/.test(url) && ['POST','PUT'].includes(method);
-        const oldName = isProductWrite ? decodeURIComponent(url.split('/api/products/')[1] || '') : '';
-        const preservedCategory = isProductWrite ? (vatByName.get(oldName)?.category || null) : null;
-        const response = await originalFetch(...args);
-        try {
-          if (isProductWrite && response.ok) {
-            const name = (body.name || oldName || '').trim();
-            const category = document.getElementById('vat-category')?.value || preservedCategory || 'כללי';
-            setTimeout(async () => {
-              if (!name) return;
-              const r = await originalFetch(`/api/vat/products/by-name/${encodeURIComponent(name)}`, {cache:'no-store'});
-              if (!r.ok) return;
-              const p = await r.json();
-              await originalFetch(`/api/vat/products/${p.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({category})});
-              await loadVat();
-            }, 50);
-          }
-        } catch (_) {}
-        return response;
-      };
-    }
   }
 
   function updatePreview() {
@@ -90,31 +49,58 @@
     if (el) el.textContent = `מע״מ: ${rate}% · מחיר כולל מע״מ: ${money(total)}`;
   }
 
+  function ensureReportColumns() {
+    const head = document.getElementById('rows-head');
+    const tr = head?.querySelector('tr');
+    if (!tr) return;
+    if (!tr.querySelector('[data-vat-column="rate"]')) {
+      const th = document.createElement('th');
+      th.dataset.vatColumn = 'rate';
+      th.className = 'text-center';
+      th.textContent = 'מע״מ';
+      tr.appendChild(th);
+    }
+  }
+
+  function effectiveRate(row) {
+    const product = row?.product_id != null ? vatById.get(Number(row.product_id)) : null;
+    const byName = product || vatByName.get(String(row?.product_name || '').trim());
+    if (byName) return Number(byName.vat_rate ?? 0);
+    return Number(vatConfig.default_rate || 18);
+  }
+
   function enhanceReport() {
     const head = document.getElementById('rows-head');
-    const rows = document.getElementById('rows');
-    if (!head || !rows) return;
-    if (!head.querySelector('[data-vat-column="rate"]')) {
-      const th = document.createElement('th'); th.dataset.vatColumn='rate'; th.className='text-center'; th.textContent='מע״מ'; head.querySelector('tr')?.appendChild(th);
-      const th2 = document.createElement('th'); th2.dataset.vatColumn='gross'; th2.className='text-center'; th2.textContent='כולל מע״מ'; head.querySelector('tr')?.appendChild(th2);
-    }
+    const tbody = document.getElementById('rows');
+    if (!head || !tbody) return;
+    ensureReportColumns();
     const render = () => {
-      rows.querySelectorAll('tr').forEach(tr => {
-        if (tr.dataset.vatDone === '1') return;
+      ensureReportColumns();
+      tbody.querySelectorAll('tr').forEach(tr => {
         const cells = tr.querySelectorAll('td');
         if (cells.length < 6) return;
-        const name = cells[1].textContent.trim();
-        const p = vatByName.get(name);
-        const total = Number((cells[5].textContent || '').replace(/[^0-9.-]/g,'')) || 0;
-        const rate = p ? Number(p.vat_rate || 0) : Number(vatConfig.default_rate || 18);
-        const gross = total * (1 + rate/100);
-        const a = document.createElement('td'); a.className='text-center sp-number'; a.dataset.vatColumn='rate'; a.textContent=`${rate}%`;
-        const b = document.createElement('td'); b.className='text-center font-black sp-number'; b.dataset.vatColumn='gross'; b.textContent=money(gross);
-        tr.appendChild(a); tr.appendChild(b); tr.dataset.vatDone='1';
+        const existing = tr.querySelector('[data-vat-column="rate"]');
+        const productName = cells[1]?.textContent?.trim() || '';
+        const rowData = Array.from(tbody.children).indexOf(tr);
+        const sourceRows = window.__periodReportRows || [];
+        const row = sourceRows[rowData] || {product_name: productName};
+        const rate = effectiveRate(row);
+        if (existing) {
+          existing.textContent = `${rate}%`;
+        } else {
+          const td = document.createElement('td');
+          td.dataset.vatColumn = 'rate';
+          td.className = 'text-center sp-number font-bold';
+          td.textContent = `${rate}%`;
+          tr.appendChild(td);
+        }
       });
     };
-    new MutationObserver(render).observe(rows,{childList:true});
     render();
+    if (!tbody.__vatObserver) {
+      tbody.__vatObserver = new MutationObserver(() => requestAnimationFrame(render));
+      tbody.__vatObserver.observe(tbody,{childList:true});
+    }
   }
 
   loadVat();
