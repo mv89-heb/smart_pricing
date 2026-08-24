@@ -1,7 +1,18 @@
 -- Category seed reference for current catalog products.
--- Run through the application's migration/seed flow, not manually in production.
--- ירקות is the only VAT-exempt category by the requested business rule.
+-- The application seeds these values automatically on startup.
+-- Existing manual category choices are preserved.
+-- Requested VAT rule: vegetables are VAT-exempt; all other categories default to 18%.
 
 -- Current report products:
--- אבוקדו, אבטיח, דבש, כוסות שבת, מגש פירות גדול, מייפל,
--- מלון, סילאן, שיבולת שועל, שמן זית, תפוח
+-- אבוקדו -> פירות
+-- אבטיח -> פירות
+-- דבש -> ממרחים וממתיקים
+-- כוסות שבת -> חד-פעמי
+-- מגש פירות גדול -> פירות
+-- מייפל -> ממרחים וממתיקים
+-- מלון -> פירות
+-- סילאן -> ממרחים וממתיקים
+-- שיבולת שועל -> דגנים
+-- שמן זית -> שמנים
+-- תפוח -> פירות
+-- בננה/בננות -> פירות
