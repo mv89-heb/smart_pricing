@@ -3,7 +3,7 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const money = v => new Intl.NumberFormat('he-IL',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(v)||0) + ' ₪';
   let vatProducts = [], vatByName = new Map();
-  let vatConfig = {default_rate:18,categories:['כללי','ירקות','פירות','מוצרי מזון','חד פעמי','אחר'],zero_vat_categories:['ירקות','פירות']};
+  let vatConfig = {default_rate:18,categories:['כללי','ירקות','פירות','ממרחים וממתיקים','דגנים','שמנים','חד-פעמי','מוצרי מזון','אחר'],zero_vat_categories:['ירקות']};
 
   async function loadVat() {
     try {
@@ -29,7 +29,7 @@
     const priceInput = document.getElementById('price');
     const wrap = document.createElement('div');
     wrap.id = 'vat-category-wrap';
-    wrap.innerHTML = `<label class="block text-sm font-black mb-2">קטגוריה</label>${categorySelect('כללי')}<div class="sp-help">המחיר במחירון הוא לפני מע״מ. ירקות ופירות מחושבים ב-0% כאשר נבחרת הקטגוריה.</div><div id="vat-preview" class="text-xs font-bold text-slate-500 mt-2"></div>`;
+    wrap.innerHTML = `<label class="block text-sm font-black mb-2">קטגוריה</label>${categorySelect('כללי')}<div class="sp-help">המחיר במחירון הוא לפני מע״מ. ירקות מחושבים ב-0% כאשר נבחרת הקטגוריה.</div><div id="vat-preview" class="text-xs font-bold text-slate-500 mt-2"></div>`;
     priceInput?.closest('div')?.parentElement?.after(wrap);
 
     document.getElementById('vat-category')?.addEventListener('change', updatePreview);

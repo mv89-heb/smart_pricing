@@ -4,8 +4,37 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 DEFAULT_VAT_RATE = float(os.environ.get('DEFAULT_VAT_RATE', '18'))
-ZERO_VAT_CATEGORIES = {'ירקות', 'פירות'}
-CATEGORY_OPTIONS = ['כללי', 'ירקות', 'פירות', 'מוצרי מזון', 'חד פעמי', 'אחר']
+# Business rule requested: vegetables are VAT-exempt. Other categories use the default rate.
+ZERO_VAT_CATEGORIES = {'ירקות'}
+CATEGORY_OPTIONS = [
+    'כללי',
+    'ירקות',
+    'פירות',
+    'ממרחים וממתיקים',
+    'דגנים',
+    'שמנים',
+    'חד-פעמי',
+    'מוצרי מזון',
+    'אחר',
+]
+
+# Seed only the products currently represented in the report/catalog.
+# Existing user choices are preserved by ON CONFLICT DO NOTHING.
+CURRENT_PRODUCT_CATEGORIES = {
+    'אבוקדו': 'פירות',
+    'אבטיח': 'פירות',
+    'דבש': 'ממרחים וממתיקים',
+    'כוסות שבת': 'חד-פעמי',
+    'מגש פירות גדול': 'פירות',
+    'מייפל': 'ממרחים וממתיקים',
+    'מלון': 'פירות',
+    'סילאן': 'ממרחים וממתיקים',
+    'שיבולת שועל': 'דגנים',
+    'שמן זית': 'שמנים',
+    'תפוח': 'פירות',
+    'בננה': 'פירות',
+    'בננות': 'פירות',
+}
 
 
 def _ensure_table(db):
@@ -18,6 +47,27 @@ def _ensure_table(db):
         )
     '''))
     db.session.commit()
+
+
+def _seed_existing_products(db, Product):
+    """Assign categories to the known current catalog without overwriting manual choices."""
+    products = Product.query.all()
+    changed = False
+    for product in products:
+        category = CURRENT_PRODUCT_CATEGORIES.get((product.name or '').strip(), 'כללי')
+        result = db.session.execute(text('''
+            INSERT INTO product_vat_settings(product_id, category, vat_rate, updated_at)
+            VALUES (:id, :category, :rate, CURRENT_TIMESTAMP)
+            ON CONFLICT(product_id) DO NOTHING
+        '''), {
+            'id': product.id,
+            'category': category,
+            'rate': 0.0 if category in ZERO_VAT_CATEGORIES else DEFAULT_VAT_RATE,
+        })
+        if result.rowcount:
+            changed = True
+    if changed:
+        db.session.commit()
 
 
 def _row(db, product_id):
@@ -42,6 +92,7 @@ def _effective(category, supplied_rate=None):
 def register_vat_features(app, db, Product, is_viewer):
     with app.app_context():
         _ensure_table(db)
+        _seed_existing_products(db, Product)
 
     @app.route('/api/vat/config', methods=['GET'])
     def vat_config():
@@ -85,6 +136,8 @@ def register_vat_features(app, db, Product, is_viewer):
         category = (data.get('category') or 'כללי').strip()
         if not category:
             category = 'כללי'
+        if category not in CATEGORY_OPTIONS:
+            return jsonify({'success': False, 'error': 'קטגוריה לא תקינה'}), 400
         try:
             rate = _effective(category, data.get('vat_rate'))
             if not Product.query.get(product_id):
