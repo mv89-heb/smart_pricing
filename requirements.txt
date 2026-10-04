@@ -1,5 +1,9 @@
 Flask==3.0.2
 Flask-SQLAlchemy==3.1.1
+# SQLAlchemy 2.1 changed the default PostgreSQL DBAPI to psycopg (v3).
+# Keep psycopg2 for backward compatibility with existing code, but install
+# psycopg explicitly so production startup works with the current SQLAlchemy.
+psycopg[binary]==3.3.6
 psycopg2-binary==2.9.9
 gunicorn==21.2.0
 python-dotenv==1.0.1
