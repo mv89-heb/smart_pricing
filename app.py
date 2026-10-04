@@ -12,6 +12,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
+# Render health check must bypass authentication and return 2xx.
+# Without this route, Render's configured /health endpoint is redirected to /login,
+# which can cause the deployment health/port check to fail.
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok"}), 200
+
 _default_secret = 'default-secret-key-for-development'
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', _default_secret)
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///local_products.db')
